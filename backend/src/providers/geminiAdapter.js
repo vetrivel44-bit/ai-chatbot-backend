@@ -10,7 +10,10 @@ async function generateStream(messages, options = {}) {
   const { temperature, maxTokens, model } = options;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model || "gemini-1.5-flash"}:streamGenerateContent?key=${config.geminiApiKey}`;
 
-  const contents = messages.map(msg => ({
+  const systemMessage = messages.find(m => m.role === "system");
+  const chatMessages = messages.filter(m => m.role !== "system");
+
+  const contents = chatMessages.map(msg => ({
     role: msg.role === "assistant" ? "model" : "user",
     parts: [{ text: msg.content }]
   }));
@@ -22,6 +25,12 @@ async function generateStream(messages, options = {}) {
       maxOutputTokens: maxTokens ?? 2048,
     }
   };
+
+  if (systemMessage) {
+    body.system_instruction = {
+      parts: [{ text: systemMessage.content }]
+    };
+  }
 
   try {
     const res = await fetch(endpoint, {

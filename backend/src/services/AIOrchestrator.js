@@ -49,9 +49,10 @@ class AIOrchestrator {
       customInstructions || "",
     ].filter(Boolean).join("\n\n");
 
-    // Standard Visualization Rules (Everywhere)
     sys += `\n\n## VISUALIZATION RULES
 Graphs should automatically appear in ANY mode when the user query indicates that visualization will improve understanding.
+- **NEVER** ask for permission to show a graph. Just include the JSON block.
+- **ALWAYS** prefer charts over long lists of numbers.
 
 ### TRIGGERS FOR GRAPHS
 1. **Comparison** (compare, vs, ranking) -> Use: \`bar\`, \`horizontal-bar\`, \`radar\`
@@ -100,7 +101,7 @@ or
       sys += "\n\nYou are a senior data analyst. Provide deep insights, identify trends, and ALWAYS include a visualization if data allows.";
     }
 
-    sys += "\n\n⚡ OUTPUT COMPLETENESS: Finish your response fully. Close all code fences. Never end mid-sentence.";
+    sys += "\n\n⚡ OUTPUT COMPLETENESS: Finish your response fully. Close all code fences. Never end mid-sentence. Ensure all JSON blocks are valid and complete.";
 
     return sys;
   }
@@ -136,16 +137,22 @@ or
       const adapter = providerManager.getAdapter(currentProviderName);
       
       if (!adapter) {
-        currentProviderName = providerManager.getFallbackProvider(currentProviderName);
+        logger.error(`AIOrchestrator: No adapter for ${currentProviderName}`);
+        const nextProvider = providerManager.getFallbackProvider(currentProviderName);
+        if (nextProvider === currentProviderName) break; // Avoid loop
+        currentProviderName = nextProvider;
         continue;
       }
 
-      this.sendVetroEvent(res, "status", attempts === 1 ? `Thinking with ${currentProviderName}...` : `Retrying with ${currentProviderName}...`);
+      this.sendVetroEvent(res, "status", attempts === 1 ? `Consulting ${currentProviderName}...` : `Re-routing to ${currentProviderName}...`);
+      logger.info(`AIOrchestrator: Attempt ${attempts} using ${currentProviderName}`, { reqId });
 
       const startTime = Date.now();
       try {
         const stream = await adapter.generateStream(fullMessages, options);
         
+        if (!stream) throw new Error("Provider returned empty stream");
+
         // Handle stream
         await this.pipeStream(stream, res, currentProviderName);
         
@@ -157,10 +164,10 @@ or
         
         if (attempts < maxAttempts) {
           const nextProvider = providerManager.getFallbackProvider(currentProviderName);
-          this.sendVetroEvent(res, "status", `Provider ${currentProviderName} failed. Switching to ${nextProvider}...`);
+          this.sendVetroEvent(res, "status", `Wait, ${currentProviderName} is busy. Trying ${nextProvider} instead...`);
           currentProviderName = nextProvider;
         } else {
-          this.sendVetroEvent(res, "error", "The AI service is currently experiencing high demand. Please try again in a few moments.");
+          this.sendVetroEvent(res, "error", "All available AI models are currently at capacity. Please try again in 30 seconds.");
         }
       }
     }
@@ -239,38 +246,58 @@ or
   normalizeChunk(chunk, provider) {
     if (!chunk) return null;
 
-    // 1. Handle Object Chunks (SDK Deltas)
-    if (typeof chunk === "object") {
-      // OpenAI / Groq / SambaNova / Mistral / OpenRouter standard
+    // 1. Handle Object Chunks (SDK Deltas from Groq)
+    if (typeof chunk === "object" && !Buffer.isBuffer(chunk)) {
       const delta = chunk.choices?.[0]?.delta;
       if (delta?.content) return delta.content;
       
-      // Gemini / Vertex AI standard
       const part = chunk.candidates?.[0]?.content?.parts?.[0];
       if (part?.text) return part.text;
       
-      // Generic .text field
       if (chunk.text) return chunk.text;
-
-      // Handle the case where the SDK returns a finished signal object or empty delta
       return null;
     }
 
-    // 2. Handle String Chunks (Direct Streams)
-    const text = String(chunk);
+    // 2. Handle String/Buffer Chunks (Mistral, SambaNova, Gemini raw)
+    const rawText = chunk.toString();
     
-    // Gemini beta stream sometimes returns JSON blocks as strings
-    if (provider === "gemini" && (text.trim().startsWith("{") || text.trim().startsWith("["))) {
+    // Handle Gemini raw JSON stream (often wrapped in [ ])
+    if (provider === "gemini") {
       try {
-        const json = JSON.parse(text);
-        if (Array.isArray(json)) {
-           return json.map(c => c.candidates?.[0]?.content?.parts?.[0]?.text || "").join("");
+        const text = rawText.trim();
+        if (text.startsWith(",") || text.startsWith("[") || text.startsWith("]")) {
+           // Handle common JSON stream artifacts
+           const cleaned = text.replace(/^[,\[\]\s]+|[,\[\]\s]+$/g, "");
+           if (!cleaned) return null;
+           const json = JSON.parse(cleaned);
+           return json.candidates?.[0]?.content?.parts?.[0]?.text || "";
         }
+        const json = JSON.parse(text);
         return json.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      } catch { return text; }
+      } catch { /* Fall through to raw text if parsing fails */ }
     }
 
-    return text;
+    // Handle standard SSE format (data: {...})
+    if (rawText.includes("data: ")) {
+      const lines = rawText.split("\n");
+      let content = "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const json = JSON.parse(trimmed.slice(6));
+            const text = json.choices?.[0]?.delta?.content || "";
+            content += text;
+          } catch (e) {
+            // Partial JSON or garbage
+          }
+        }
+      }
+      return content || null;
+    }
+
+    return rawText;
   }
 }
 
