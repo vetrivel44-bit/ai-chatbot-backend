@@ -131,7 +131,12 @@ or
     }
 
     const sysPrompt = await this.buildSystemPrompt(mode, { userQuery, webContext, memories });
-    const fullMessages = [{ role: "system", content: sysPrompt }, ...messages.slice(-10)];
+    let fullMessages = [{ role: "system", content: sysPrompt }, ...messages.slice(-10)];
+    // Prevent empty assistant messages (Mistral error)
+    fullMessages = fullMessages.filter(m => {
+      if (m.role === "assistant" && !m.content && (!m.tool_calls || m.tool_calls.length === 0)) return false;
+      return true;
+    });
 
     while (attempts < maxAttempts && !success) {
       attempts++;
@@ -163,12 +168,25 @@ or
         logger.error(`AIOrchestrator.error [${currentProviderName}]`, { reqId, error: err.message });
         providerManager.updateMetrics(currentProviderName, false, Date.now() - startTime);
         
+        const isRateLimit = /rate limit|429|too many requests/i.test(err.message);
+        if (isRateLimit) {
+          providerManager.suspendProvider(currentProviderName, "Rate limit reached");
+        }
+        
         if (attempts < maxAttempts) {
           const nextProvider = providerManager.getFallbackProvider(currentProviderName);
-          this.sendVetroEvent(res, "status", `Wait, ${currentProviderName} is busy. Trying ${nextProvider} instead...`);
+          const friendlyMsg = isRateLimit 
+            ? `Model ${currentProviderName} is temporarily busy. Switching to another AI model…`
+            : `Issue with ${currentProviderName}. Switching to another model…`;
+          
+          this.sendVetroEvent(res, "status", friendlyMsg);
           currentProviderName = nextProvider;
+          
+          // Exponential backoff
+          const backoffTime = Math.pow(2, attempts) * 1000;
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
         } else {
-          this.sendVetroEvent(res, "error", `All available AI models are currently at capacity. Last error: ${err.message}`);
+          this.sendVetroEvent(res, "error", "All available AI models are currently at capacity. Please try again in 30 seconds.");
         }
       }
     }

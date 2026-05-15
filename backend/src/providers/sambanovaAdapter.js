@@ -11,7 +11,7 @@ async function generateStream(messages, options = {}) {
   const endpoint = "https://api.sambanova.ai/v1/chat/completions";
   
   const body = {
-    model: model || "Meta-Llama-3.1-70B-Instruct",
+    model: model || "Meta-Llama-3.3-70B-Instruct",
     messages,
     temperature: temperature ?? 0.7,
     max_tokens: maxTokens ?? 2048,

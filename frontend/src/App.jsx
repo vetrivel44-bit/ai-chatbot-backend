@@ -2645,7 +2645,7 @@ export default function App() {
                 <WebSpinIcon /> {streamStatus === "recovering" ? "Recovering..." : "Expanding answer…"}
               </div>
             )}
-            {streamStatus !== "idle" && streamStatus !== "completed" && (
+            {streamStatus !== "idle" && streamStatus !== "completed" && !isTyping && (
               <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, color: "var(--accent)", background: "rgba(var(--accent-rgb),0.1)" }}>
                 <WebSpinIcon /> {streamStatus.charAt(0).toUpperCase() + streamStatus.slice(1)}...
               </div>

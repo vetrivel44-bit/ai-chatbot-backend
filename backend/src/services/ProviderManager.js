@@ -142,6 +142,14 @@ class ProviderManager {
     }
   }
 
+  suspendProvider(providerName, reason) {
+    const p = this.providers[providerName];
+    if (!p) return;
+    logger.warn(`ProviderManager: Suspending ${providerName}. Reason: ${reason}`);
+    p.isSuspended = true;
+    p.lastFailure = Date.now();
+  }
+
   getAdapter(name) {
     return this.providers[name]?.adapter;
   }
