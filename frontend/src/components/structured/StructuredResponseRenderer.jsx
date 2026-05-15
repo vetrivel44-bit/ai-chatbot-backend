@@ -357,7 +357,7 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
       case 'route':
         component = (
           <LocationMap 
-            {...commonProps} 
+            key={`map-${index}`}
             type={section.type}
             place={section.place} 
             summary={section.summary} 
@@ -367,30 +367,31 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
             destination={section.destination}
             waypoints={section.waypoints}
             details={section.details} 
+            delay={section.delay}
           />
         );
         break;
       case 'gallery':
-        component = <ImageGallery {...commonProps} query={section.query} images={section.images} />;
+        component = <ImageGallery key={`gal-${index}`} {...commonProps} query={section.query} images={section.images} />;
         break;
       case 'chart':
-        component = <DataChart {...commonProps} title={section.title} data={section.data} chartType={section.chartType} library={section.library} />;
+        component = <DataChart key={`chart-${index}`} {...commonProps} title={section.title} data={section.data} chartType={section.chartType} library={section.library} />;
         break;
       case 'editor':
-        component = <InteractiveEditor {...commonProps} language={section.language} signature={section.signature} questionNumber={section.questionNumber} totalQuestions={section.totalQuestions} onSubmit={onSubmitCode} />;
+        component = <InteractiveEditor key={`edit-${index}`} {...commonProps} language={section.language} signature={section.signature} questionNumber={section.questionNumber} totalQuestions={section.totalQuestions} onSubmit={onSubmitCode} />;
         break;
       case 'results':
-        component = <ResultsChart {...commonProps} overallScore={section.overallScore} topicScores={section.topicScores} typeScores={section.typeScores} weakAreas={section.weakAreas} strongestTopic={section.strongestTopic} strongestType={section.strongestType} />;
+        component = <ResultsChart key={`res-${index}`} {...commonProps} overallScore={section.overallScore} topicScores={section.topicScores} typeScores={section.typeScores} weakAreas={section.weakAreas} strongestTopic={section.strongestTopic} strongestType={section.strongestType} />;
         break;
       case 'mcq':
       case 'onboarding':
-        component = <OnboardingCard {...commonProps} step={section.step} question={section.question} options={section.options} onSelect={onSubmitCode} totalSteps={4} />;
+        component = <OnboardingCard key={`onb-${index}`} {...commonProps} step={section.step} question={section.question} options={section.options} onSelect={onSubmitCode} totalSteps={4} />;
         break;
       case 'collapsible':
-        component = <CollapsibleDetails {...commonProps} title={section.title} content={section.content} icon={section.icon} />;
+        component = <CollapsibleDetails key={`coll-${index}`} {...commonProps} title={section.title} content={section.content} icon={section.icon} />;
         break;
       case 'section':
-        component = <StructuredSection {...commonProps} title={section.title} content={section.content} />;
+        component = <StructuredSection key={`sec-${index}`} {...commonProps} title={section.title} content={section.content} />;
         break;
       default:
         return null;

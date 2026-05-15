@@ -226,8 +226,8 @@ const LocationMap = ({
         )}
       </div>
 
-      <div className="map-wrapper" style={{ height: '400px' }}>
-        <div style={{ height: '100%', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--structured-border)', position: 'relative' }}>
+      <div className="map-wrapper">
+        <div style={{ height: '400px', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--structured-border)', position: 'relative' }}>
           <MapContainer 
             center={mapData.center} 
             zoom={mapData.zoom} 
@@ -267,22 +267,22 @@ const LocationMap = ({
             <button 
               className={`map-type-btn ${mapType === 'street' ? 'active' : ''}`}
               onClick={() => setMapType('street')}
-              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'street' ? '#4285F4' : '#fff', color: mapType === 'street' ? '#fff' : '#333', cursor: 'pointer' }}
+              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'street' ? '#4285F4' : '#fff', color: mapType === 'street' ? '#fff' : '#333', cursor: 'pointer', fontWeight: 600 }}
             >Map</button>
             <button 
               className={`map-type-btn ${mapType === 'satellite' ? 'active' : ''}`}
               onClick={() => setMapType('satellite')}
-              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'satellite' ? '#4285F4' : '#fff', color: mapType === 'satellite' ? '#fff' : '#333', cursor: 'pointer' }}
+              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'satellite' ? '#4285F4' : '#fff', color: mapType === 'satellite' ? '#fff' : '#333', cursor: 'pointer', fontWeight: 600 }}
             >Satellite</button>
           </div>
         </div>
 
-        <div className="map-actions-row" style={{ marginTop: '16px' }}>
+        <div className="map-actions-row">
           <button className="map-action-btn primary" onClick={() => window.open(googleMapsUrl, '_blank')}>
             <ExternalLink size={16} />
             <span>Open in Google Maps</span>
           </button>
-          <button className="map-action-btn secondary" onClick={() => {
+          <button className="map-action-btn" onClick={() => {
              const dirUrl = isRoute 
                ? googleMapsUrl 
                : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place || `${mapData.markers[0]?.lat},${mapData.markers[0]?.lng}`)}`;
