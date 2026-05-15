@@ -15,7 +15,7 @@ import LocationMap from "./components/structured/LocationMap";
 import ThinkingIndicator from "./components/ThinkingIndicator";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
-const API = "/api";
+const API = import.meta.env.VITE_API_BASE_URL || "/api";
 const SERPER_API_KEY = import.meta.env.VITE_SERPER_API_KEY || "";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const VITE_GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
