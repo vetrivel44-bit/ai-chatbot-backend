@@ -42,6 +42,14 @@ if (config.nodeEnv === "development" && !process.env.RENDER) {
   app.use(require("./middleware/debugMiddleware"));
 }
 
+app.get("/", (req, res) => {
+  res.send("Backend running - VetroAI (Production)");
+});
+
+app.get("/api/health", (req, res) => {
+  return res.json({ success: true, status: "ok", mode: "production" });
+});
+
 app.get("/health", (_req, res) => {
   logger.info("health.check", { env: config.nodeEnv, render: !!process.env.RENDER });
   return successResponse(res, "Service is healthy", {
