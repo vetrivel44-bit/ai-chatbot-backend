@@ -68,20 +68,45 @@ const LocationMap = ({
 
   const [mapType, setMapType] = useState('street'); // 'street' or 'satellite'
 
+  // Use a ref to track the last processed parameters to prevent redundant fetching
+  const lastParamsRef = React.useRef("");
+
   useEffect(() => {
+    // Create a stable string representation of relevant props
+    const currentParams = JSON.stringify({ place, coordinates, points, origin, destination, waypoints, isRoute });
+    
+    // Skip if props haven't actually changed (avoids loops during streaming)
+    if (currentParams === lastParamsRef.current) return;
+    lastParamsRef.current = currentParams;
+
+    let isMounted = true;
+    const abortController = new AbortController();
+
     const initMap = async () => {
-      setMapData(prev => ({ ...prev, loading: true }));
+      // Avoid flash of loading if we already have data in sync (like coordinates)
+      if (!coordinates && !points.length && !origin && !destination) {
+        setMapData(prev => ({ ...prev, loading: true }));
+      }
+      
       try {
         const geocode = async (q) => {
           if (!q) return null;
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
-          const d = await res.json();
-          return d?.[0] ? { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon), label: q } : null;
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`, {
+              signal: abortController.signal
+            });
+            const d = await res.json();
+            return d?.[0] ? { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon), label: q } : null;
+          } catch (e) {
+            return null;
+          }
         };
 
         if (isRoute) {
           const start = (origin && typeof origin === 'object') ? origin : await geocode(origin);
           const end = (destination && typeof destination === 'object') ? destination : await geocode(destination);
+
+          if (!isMounted) return;
 
           if (!start || !end) {
             setMapData(prev => ({ ...prev, error: "Could not resolve route endpoints", loading: false }));
@@ -93,6 +118,8 @@ const LocationMap = ({
             const r = typeof wp === 'string' ? await geocode(wp) : wp;
             if (r) resolvedWaypoints.push(r);
           }
+
+          if (!isMounted) return;
 
           const markers = [
             { ...start, type: 'start' },
@@ -114,6 +141,7 @@ const LocationMap = ({
           
           if (!coordinates && points.length === 0 && place) {
             const r = await geocode(place);
+            if (!isMounted) return;
             if (r) {
               center = [r.lat, r.lng];
               markers = [{ ...r, label: place }];
@@ -122,6 +150,8 @@ const LocationMap = ({
               return;
             }
           }
+
+          if (!isMounted) return;
 
           setMapData({
             center,
@@ -133,11 +163,18 @@ const LocationMap = ({
           });
         }
       } catch (err) {
-        setMapData(prev => ({ ...prev, error: "Map initialization failed", loading: false }));
+        if (isMounted) {
+          setMapData(prev => ({ ...prev, error: "Map initialization failed", loading: false }));
+        }
       }
     };
 
     initMap();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [place, coordinates, points, origin, destination, waypoints, isRoute]);
 
   const bounds = mapData.markers.length > 1 

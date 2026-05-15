@@ -354,7 +354,21 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
         component = <ArchitectureDiagram {...commonProps} title={section.title} nodes={section.nodes} connections={section.connections} />;
         break;
       case 'location':
-        component = <LocationMap {...commonProps} place={section.place} summary={section.summary} coordinates={section.coordinates} details={section.details} />;
+      case 'route':
+        component = (
+          <LocationMap 
+            {...commonProps} 
+            type={section.type}
+            place={section.place} 
+            summary={section.summary} 
+            coordinates={section.coordinates} 
+            points={section.points}
+            origin={section.origin}
+            destination={section.destination}
+            waypoints={section.waypoints}
+            details={section.details} 
+          />
+        );
         break;
       case 'gallery':
         component = <ImageGallery {...commonProps} query={section.query} images={section.images} />;
