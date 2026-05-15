@@ -242,92 +242,6 @@ function CalcWidget({ onClose }) {
   );
 }
 
-// ─── FOCUS TIMER ─────────────────────────────────────────────────────────────
-function FocusTimer({ onClose }) {
-  const [mins, setMins] = useState(25);
-  const [secs, setSecs] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [mode, setMode] = useState("focus");
-  const [sessions, setSessions] = useState(0);
-  const tick = useRef(null);
-
-  const MODES_T = { 
-    focus: [25, "Focus", <Target size={14} />], 
-    short: [5, "Short Break", <Coffee size={14} />], 
-    long: [15, "Long Break", <Leaf size={14} />] 
-  };
-
-  const reset = (m) => { setMode(m); setRunning(false); clearInterval(tick.current); setMins(MODES_T[m][0]); setSecs(0); };
-
-  useEffect(() => {
-    if (running) {
-      tick.current = setInterval(() => {
-        setSecs(s => {
-          if (s === 0) {
-            setMins(m => {
-              if (m === 0) {
-                clearInterval(tick.current); setRunning(false);
-                setSessions(prev => prev + 1);
-                if (window.Notification?.permission === "granted") new Notification("VetroAI Timer ✅", { body: "Session complete! Take a break." });
-                return 0;
-              }
-              return m - 1;
-            });
-            return 59;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    } else clearInterval(tick.current);
-    return () => clearInterval(tick.current);
-  }, [running]);
-
-  useEffect(() => { if (window.Notification?.permission === "default") Notification.requestPermission(); }, []);
-
-  const pct = ((MODES_T[mode][0] * 60 - (mins * 60 + secs)) / (MODES_T[mode][0] * 60)) * 100;
-  const r = 54, circ = 2 * Math.PI * r;
-
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 340 }}>
-        <div className="modal-topbar">
-          <h3 className="modal-title" style={{ display: "flex", alignItems: "center", gap: 8 }}><Timer size={18} /> Focus Timer</h3>
-          <button className="modal-x" onClick={onClose} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}><X size={14} /></button>
-        </div>
-        <div className="modal-body" style={{ alignItems: "center", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-            {Object.entries(MODES_T).map(([k, [, label, icon]]) => (
-              <button key={k} className={`btn-ghost${mode === k ? " active" : ""}`} style={{ fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 4 }} onClick={() => reset(k)}>
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-          <svg width={140} height={140} viewBox="0 0 140 140">
-            <circle cx={70} cy={70} r={r} fill="none" stroke="var(--border)" strokeWidth={8} />
-            <circle cx={70} cy={70} r={r} fill="none" stroke="var(--accent)" strokeWidth={8}
-              strokeDasharray={circ} strokeDashoffset={circ - (pct / 100) * circ}
-              strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: "stroke-dashoffset 1s linear" }} />
-            <text x={70} y={67} textAnchor="middle" style={{ font: "bold 26px system-ui", fill: "var(--ink)" }}>
-              {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
-            </text>
-            <text x={70} y={86} textAnchor="middle" style={{ font: "11px system-ui", fill: "var(--ink-3)" }}>
-              {MODES_T[mode][1]}
-            </text>
-          </svg>
-          {sessions > 0 && <p style={{ fontSize: "0.8rem", color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 4 }}><Check size={14} style={{ color: "#10b981" }} /> {sessions} session{sessions > 1 ? "s" : ""} completed today</p>}
-          <div style={{ display: "flex", gap: 12 }}>
-            <button className="btn-primary" onClick={() => setRunning(v => !v)} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {running ? <Pause size={14} /> : <Play size={14} />} {running ? "Pause" : "Start"}
-            </button>
-            <button className="btn-ghost" onClick={() => reset(mode)} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <RotateCcw size={14} /> Reset
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── WEB SEARCH ──────────────────────────────────────────────────────────────
 const CURRENT_TRIGGERS = [
@@ -488,19 +402,6 @@ const detectImagePrompt = (text) => {
 };
 const getImageUrl = (prompt) => `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=512&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
 
-// ─── MEMORY SYSTEM ────────────────────────────────────────────────────────────
-const MEMORY_PATTERNS = [
-  { rx: /remember (?:that )?(.{4,80})/i, prefix: "User note:" },
-  { rx: /my name is ([A-Za-z ]{2,30})/i, prefix: "User's name:" },
-  { rx: /i(?:'m| am) (?:a |an )?([A-Za-z ]{3,40})/i, prefix: "User is:" },
-  { rx: /i (?:work|study|live) (?:at|in|as) ([A-Za-z ,]{3,50})/i, prefix: "User works/studies/lives:" },
-  { rx: /i(?:'m| am) from ([A-Za-z ,]{3,40})/i, prefix: "User is from:" },
-  { rx: /my (?:favourite|favorite|fav) (.{3,50})/i, prefix: "User favourite:" },
-];
-const extractMemory  = (text) => { for (const { rx, prefix } of MEMORY_PATTERNS) { const m = text.match(rx); if (m) return `${prefix} ${m[1].trim()}`; } return null; };
-const getMemories    = (email) => { try { return JSON.parse(localStorage.getItem(`vetroai_memories_${email}`) || "[]"); } catch { return []; } };
-const saveMemories   = (email, mems) => { localStorage.setItem(`vetroai_memories_${email}`, JSON.stringify(mems.slice(-30))); };
-const addMemory      = (email, fact) => { const mems = getMemories(email); if (!mems.includes(fact)) saveMemories(email, [...mems, fact]); };
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
 const LANGS = {
@@ -1021,31 +922,6 @@ function BookmarksPanel({ bookmarks, onSelect, onRemove, onClose, t }) {
   );
 }
 
-function MemoryPanel({ memories, onClear, onRemove, onClose, t }) {
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-topbar">
-          <h3 className="modal-title"><BrainIcon />{t.memories} ({memories.length})</h3>
-          <button className="modal-x" onClick={onClose}><XIcon /></button>
-        </div>
-        <div className="modal-body">
-          {memories.length === 0
-            ? <div className="hist-empty"><span><BrainIcon /></span><p>No memories yet. Say "Remember that…" or "My name is…"</p></div>
-            : <>{memories.map((m, i) => (
-              <div key={i} className="memory-item">
-                <span>{m}</span>
-                <button onClick={() => onRemove(i)}><TrashIcon /></button>
-              </div>
-            ))}
-            <div className="modal-footer">
-              <button className="btn-ghost" onClick={onClear}>{t.clearMemory}</button>
-            </div></>}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ReactionPicker({ onPick, onClose }) {
   return (
@@ -1075,206 +951,6 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
   );
 }
 
-// ─── BOOKING SYSTEM ──────────────────────────────────────────────────────────
-const BOOKING_SERVICES = [
-  { id: "tutoring", icon: <GraduationCap size={16} />, name: "Tutoring", desc: "1-on-1 academic help", price: "₹299/hr", color: "#3b82f6" },
-  { id: "code_review", icon: <Terminal size={16} />, name: "Code Review", desc: "Expert code analysis", price: "₹499/hr", color: "#10b981" },
-  { id: "career", icon: <UserIcon />, name: "Career Counseling", desc: "Career path guidance", price: "₹399/hr", color: "#8b5cf6" },
-  { id: "project", icon: <SparkleIcon />, name: "Project Help", desc: "Build projects together", price: "₹599/hr", color: "#f59e0b" },
-  { id: "study", icon: <BookmarkIcon />, name: "Study Session", desc: "Group study planning", price: "₹199/hr", color: "#ec4899" },
-  { id: "interview", icon: <Target size={16} />, name: "Mock Interview", desc: "Practice interviews", price: "₹449/hr", color: "#ef4444" },
-];
-
-const getBookings = () => { try { return JSON.parse(localStorage.getItem("vetroai_bookings") || "[]"); } catch { return []; } };
-const saveBookings = (b) => localStorage.setItem("vetroai_bookings", JSON.stringify(b));
-
-const BOOKING_DETECT = /\b(book|schedule|reserve|appointment|session|slot)\b.{0,40}\b(tutor|code|review|career|project|study|interview|help|session|class)\b/i;
-const detectBookingIntent = (text) => BOOKING_DETECT.test(text);
-
-function BookingWidget({ onClose, onBooked }) {
-  const [step, setStep] = useState(0);
-  const [service, setService] = useState(null);
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [duration, setDuration] = useState("60");
-  const [priority, setPriority] = useState("normal");
-  const [notes, setNotes] = useState("");
-  const [confirmed, setConfirmed] = useState(null);
-
-  const minDate = new Date().toISOString().split("T")[0];
-
-  const handleBook = () => {
-    const booking = {
-      id: `BK-${Date.now().toString(36).toUpperCase()}`,
-      service, date, time, duration: parseInt(duration),
-      priority, notes, status: "upcoming",
-      createdAt: new Date().toISOString(),
-    };
-    const all = getBookings();
-    all.unshift(booking);
-    saveBookings(all);
-    setConfirmed(booking);
-    onBooked?.(booking);
-  };
-
-  if (confirmed) return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 420 }}>
-        <div className="modal-body" style={{ alignItems: "center", textAlign: "center", padding: 36 }}>
-          <div className="booking-success-icon"><CheckIcon /></div>
-          <h3 style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--ink)", margin: "12px 0 6px" }}>Booking Confirmed!</h3>
-          <p style={{ color: "var(--ink-3)", fontSize: "0.88rem", marginBottom: 16 }}>Your session has been scheduled successfully.</p>
-          <div className="booking-confirm-card">
-            <div className="booking-confirm-row"><span>ID</span><strong>{confirmed.id}</strong></div>
-            <div className="booking-confirm-row"><span>Service</span><strong>{confirmed.service.icon} {confirmed.service.name}</strong></div>
-            <div className="booking-confirm-row"><span>Date</span><strong>{new Date(confirmed.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</strong></div>
-            <div className="booking-confirm-row"><span>Time</span><strong>{confirmed.time}</strong></div>
-            <div className="booking-confirm-row"><span>Duration</span><strong>{confirmed.duration} min</strong></div>
-            {confirmed.priority === "urgent" && <div className="booking-confirm-row"><span>Priority</span><strong style={{ color: "#ef4444" }}>Urgent</strong></div>}
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button className="btn-ghost" onClick={() => { const ics = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:VetroAI - ${confirmed.service.name}\nDTSTART:${confirmed.date.replace(/-/g,"")}T${confirmed.time.replace(":","")}00\nDURATION:PT${confirmed.duration}M\nDESCRIPTION:${confirmed.notes || "VetroAI Session"}\nEND:VEVENT\nEND:VCALENDAR`; const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([ics],{type:"text/calendar"})); a.download=`vetroai-${confirmed.id}.ics`; a.click(); }}><Calendar size={14} /> Add to Calendar</button>
-            <button className="btn-primary" onClick={onClose}>Done</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }}>
-        <div className="modal-topbar">
-          <h3 className="modal-title"><Calendar size={16} /> Book a Session</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div className="booking-steps">
-              {[0, 1, 2].map(s => <div key={s} className={`booking-step-dot${step >= s ? " active" : ""}`} />)}
-            </div>
-            <button className="modal-x" onClick={onClose}><XIcon /></button>
-          </div>
-        </div>
-        <div className="modal-body">
-          {step === 0 && (
-            <div className="field-group">
-              <label className="field-label">Choose Service</label>
-              <div className="booking-services-grid">
-                {BOOKING_SERVICES.map(s => (
-                  <div key={s.id} className={`booking-service-card${service?.id === s.id ? " selected" : ""}`} style={{ "--svc-color": s.color }} onClick={() => setService(s)}>
-                    <span className="booking-svc-icon">{s.icon}</span>
-                    <span className="booking-svc-name">{s.name}</span>
-                    <span className="booking-svc-desc">{s.desc}</span>
-                    <span className="booking-svc-price">{s.price}</span>
-                    {service?.id === s.id && <span className="booking-svc-check"><CheckIcon /></span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {step === 1 && (
-            <>
-              <div className="field-group">
-                <label className="field-label">Date</label>
-                <input className="field-input" type="date" min={minDate} value={date} onChange={e => setDate(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Time</label>
-                <input className="field-input" type="time" value={time} onChange={e => setTime(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Duration</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["30", "60", "90", "120"].map(d => (
-                    <button key={d} className={`booking-dur-btn${duration === d ? " active" : ""}`} onClick={() => setDuration(d)}>{d} min</button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-          {step === 2 && (
-            <>
-              <div className="field-group">
-                <label className="field-label">Priority</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className={`booking-dur-btn${priority === "normal" ? " active" : ""}`} onClick={() => setPriority("normal")}>Normal</button>
-                  <button className={`booking-dur-btn${priority === "urgent" ? " active" : ""}`} onClick={() => setPriority("urgent")} style={priority === "urgent" ? { borderColor: "#ef4444", background: "rgba(239,68,68,0.08)", color: "#ef4444" } : {}}>Urgent</button>
-                </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Notes (optional)</label>
-                <textarea className="field-textarea" placeholder="Any specific topics or requirements…" value={notes} onChange={e => setNotes(e.target.value)} style={{ minHeight: 60 }} />
-              </div>
-              <div className="booking-summary">
-                <div className="booking-confirm-row"><span>Service</span><strong>{service?.icon} {service?.name}</strong></div>
-                <div className="booking-confirm-row"><span>When</span><strong>{date && new Date(date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} at {time}</strong></div>
-                <div className="booking-confirm-row"><span>Duration</span><strong>{duration} min</strong></div>
-                <div className="booking-confirm-row"><span>Price</span><strong>{service?.price}</strong></div>
-              </div>
-            </>
-          )}
-          <div className="modal-footer">
-            {step > 0 && <button className="btn-ghost" onClick={() => setStep(s => s - 1)}>← Back</button>}
-            {step < 2 ? (
-              <button className="btn-primary" disabled={step === 0 ? !service : !date || !time} onClick={() => setStep(s => s + 1)}>Next →</button>
-            ) : (
-              <button className="btn-primary" onClick={handleBook} style={{ background: "var(--accent)" }}>✓ Confirm Booking</button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BookingHistory({ onClose }) {
-  const [bookings, setBookings] = useState(getBookings);
-  const [filter, setFilter] = useState("all");
-  const cancel = (id) => {
-    const updated = bookings.map(b => b.id === id ? { ...b, status: "cancelled" } : b);
-    setBookings(updated); saveBookings(updated);
-  };
-  const filtered = filter === "all" ? bookings : bookings.filter(b => b.status === filter);
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }}>
-        <div className="modal-topbar">
-          <h3 className="modal-title"><Calendar size={16} /> My Bookings ({bookings.length})</h3>
-          <button className="modal-x" onClick={onClose}><XIcon /></button>
-        </div>
-        <div className="modal-body">
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {["all", "upcoming", "completed", "cancelled"].map(f => (
-              <button key={f} className={`booking-dur-btn${filter === f ? " active" : ""}`} onClick={() => setFilter(f)} style={{ fontSize: "0.76rem", textTransform: "capitalize" }}>{f}</button>
-            ))}
-          </div>
-          {filtered.length === 0 ? (
-            <div className="hist-empty"><span><Calendar size={16} /></span><p>No {filter !== "all" ? filter : ""} bookings yet</p></div>
-          ) : filtered.map(b => (
-            <div key={b.id} className="booking-hist-card">
-              <div className="booking-hist-top">
-                <span className="booking-hist-icon">{b.service?.icon || <Calendar size={16} />}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--ink)" }}>{b.service?.name || "Session"}</div>
-                  <div style={{ fontSize: "0.76rem", color: "var(--ink-3)" }}>{b.id} · {b.duration}min</div>
-                </div>
-                <span className={`booking-status ${b.status}`}>{b.status}</span>
-              </div>
-              <div style={{ display: "flex", gap: 12, fontSize: "0.8rem", color: "var(--ink-2)", padding: "6px 0" }}>
-                <span>📅 {b.date && new Date(b.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
-                <span>⏰ {b.time}</span>
-                {b.priority === "urgent" && <span style={{ color: "#ef4444" }}>🔴 Urgent</span>}
-              </div>
-              {b.status === "upcoming" && (
-                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                  <button className="btn-ghost sm" onClick={() => cancel(b.id)} style={{ fontSize: "0.74rem", padding: "4px 10px" }}>Cancel</button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── SCRATCHPAD ──────────────────────────────────────────────────────────────
 function ScratchpadWidget({ onClose }) {
@@ -1863,17 +1539,12 @@ export default function App() {
   // ── Bookmarks & Memory ────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks]           = useState(() => { try { return JSON.parse(localStorage.getItem("vetroai_bookmarks") || "[]"); } catch { return []; } });
   const [showBookmarks, setShowBookmarks]   = useState(false);
-  const [memories, setMemories]             = useState([]);
-  const [showMemory, setShowMemory]         = useState(false);
 
   // ── Modals ────────────────────────────────────────────────────────────────────
   const [showProfile, setShowProfile]       = useState(false);
   const [showSysPrompt, setShowSysPrompt]   = useState(false);
   const [showShare, setShowShare]           = useState(false);
   const [showCalc, setShowCalc]             = useState(false);
-  const [showTimer, setShowTimer]           = useState(false);
-  const [showBooking, setShowBooking]       = useState(false);
-  const [showBookingHistory, setShowBookingHistory] = useState(false);
   const [showScratchpad, setShowScratchpad] = useState(false);
   const [showPlayground, setShowPlayground] = useState(false);
   const [showStats, setShowStats]           = useState(false);
@@ -1958,10 +1629,10 @@ export default function App() {
   }, [input]);
 
   useEffect(() => {
-    const anyModal = isSidebarOpen || showProfile || showSysPrompt || showShare || showBookmarks || showMemory || showCalc || showTimer || showBooking || showBookingHistory || showScratchpad || showPlayground || showStats || !!confirmDelete;
+    const anyModal = isSidebarOpen || showProfile || showSysPrompt || showShare || showBookmarks || showCalc || showScratchpad || showPlayground || showStats || !!confirmDelete;
     document.body.style.overflow = anyModal ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
-  }, [isSidebarOpen, showProfile, showSysPrompt, showShare, showBookmarks, showMemory, showCalc, showTimer, showBooking, showBookingHistory, showScratchpad, showPlayground, showStats, confirmDelete]);
+  }, [isSidebarOpen, showProfile, showSysPrompt, showShare, showBookmarks, showCalc, showScratchpad, showPlayground, showStats, confirmDelete]);
 
   // ── Auth submit ───────────────────────────────────────────────────────────────
   const handleAuthSubmit = async (e) => {
@@ -2183,18 +1854,6 @@ export default function App() {
   const isBookmarked  = (msg) => { const id = `${msg.timestamp}_${msg.content?.slice(0, 20)}`; return bookmarks.some(b => b.id === id); };
   const removeBookmark = (id) => setBookmarks(prev => prev.filter(b => b.id !== id));
 
-  // ── Memory ────────────────────────────────────────────────────────────────────
-  const handleAddMemory = (fact) => {
-    if (!userInfo?.email) return;
-    addMemory(userInfo.email, fact);
-    setMemories(getMemories(userInfo.email));
-    addToast(`🧠 Remembered: ${fact.slice(0, 40)}`, "success", 2500);
-  };
-  const removeMemoryItem = (idx) => {
-    if (!userInfo?.email) return;
-    const m = memories.filter((_, i) => i !== idx); saveMemories(userInfo.email, m); setMemories(m);
-  };
-  const clearAllMemory = () => { if (!userInfo?.email) return; saveMemories(userInfo.email, []); setMemories([]); addToast("Memory cleared", "info"); };
 
   // ── Follow-up generation ──────────────────────────────────────────────────────
   const generateFollowUps = useCallback(async (lastBotMsg, userQuery) => {
@@ -2260,12 +1919,10 @@ export default function App() {
       if (e.key === "Escape") {
         if (confirmDelete)  { setConfirmDelete(null); return; }
         if (showCalc)       { setShowCalc(false); return; }
-        if (showTimer)      { setShowTimer(false); return; }
         if (showProfile)    { setShowProfile(false); return; }
         if (showSysPrompt)  { setShowSysPrompt(false); return; }
         if (showShare)      { setShowShare(false); return; }
         if (showBookmarks)  { setShowBookmarks(false); return; }
-        if (showMemory)     { setShowMemory(false); return; }
         if (isSidebarOpen)  { setIsSidebarOpen(false); return; }
         if (isVoiceOpen)    { closeVoice(); return; }
         if (chatSearchOpen) { setChatSearchOpen(false); setChatSearchQuery(""); return; }
@@ -2279,7 +1936,7 @@ export default function App() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [chatSearchOpen, closeVoice, confirmDelete, isSidebarOpen, isVoiceOpen, newChat, showBookmarks, showCalc, showMemory, showProfile, showShare, showSysPrompt, showTimer]);
+  }, [chatSearchOpen, closeVoice, confirmDelete, isSidebarOpen, isVoiceOpen, newChat, showBookmarks, showCalc, showProfile, showShare, showSysPrompt]);
 
   // ── Scroll ────────────────────────────────────────────────────────────────────
   const handleScroll = () => {
@@ -2481,7 +2138,7 @@ export default function App() {
     fd.append("temperature", String(temperature));
     fd.append("maxTokens", String(maxTokens));
     fd.append("reqId", reqId);
-    fd.append("memories", JSON.stringify(userInfo?.email ? getMemories(userInfo.email) : []));
+    fd.append("memories", JSON.stringify([]));
     
     if (fileData) fd.append("file", fileData);
 
@@ -2782,9 +2439,7 @@ export default function App() {
       {showSysPrompt && <SysPromptModal onClose={() => setShowSysPrompt(false)} t={t} value={systemPrompt} setValue={setSystemPrompt} />}
       {showShare     && messages.length > 0 && <ShareModal onClose={() => setShowShare(false)} t={t} messages={messages} />}
       {showBookmarks && <BookmarksPanel bookmarks={bookmarks} onSelect={msg => setInput(msg.content)} onRemove={removeBookmark} onClose={() => setShowBookmarks(false)} t={t} />}
-      {showMemory    && <MemoryPanel memories={memories} onClear={clearAllMemory} onRemove={removeMemoryItem} onClose={() => setShowMemory(false)} t={t} />}
       {showCalc      && <CalcWidget onClose={() => setShowCalc(false)} />}
-      {showTimer     && <FocusTimer onClose={() => setShowTimer(false)} />}
       {showModelPicker && <ModelPickerModal 
         currentMode={selectedMode} 
         currentProvider={selectedProvider}
@@ -2798,11 +2453,9 @@ export default function App() {
         onSelectProvider={setSelectedProvider}
         onClose={() => setShowModelPicker(false)} 
       />}
-      {showBooking   && <BookingWidget onClose={() => setShowBooking(false)} onBooked={(b) => addToast(`✅ Booked: ${b.service.name} — ${b.id}`, "success", 4000)} />}
-      {showBookingHistory && <BookingHistory onClose={() => setShowBookingHistory(false)} />}
       {showScratchpad && <ScratchpadWidget onClose={() => setShowScratchpad(false)} />}
       {showPlayground && <CodePlayground onClose={() => setShowPlayground(false)} />}
-      {showStats     && <StatsPanel onClose={() => setShowStats(false)} sessions={sessions} bookings={getBookings()} />}
+      {showStats     && <StatsPanel onClose={() => setShowStats(false)} sessions={sessions} bookings={[]} />}
       {confirmDelete && <ConfirmDialog message={confirmDelete.message} onConfirm={confirmDeleteSession} onCancel={() => setConfirmDelete(null)} />}
       {/* NEW FEATURES */}
       {showPersona   && <PersonaSwitcher currentPersonaId={activePersona?.id} onSelect={setActivePersona} onClose={() => setShowPersona(false)} />}
@@ -2907,24 +2560,11 @@ export default function App() {
               <BookmarkIcon /><span>{t.bookmarks}</span>
               {bookmarks.length > 0 && <span className="sb-badge">{bookmarks.length}</span>}
             </button>
-            <button className="sb-quick-btn" onClick={() => setShowMemory(true)} title={t.memories}>
-              <BrainIcon /><span>{t.memories}</span>
-              {memories.length > 0 && <span className="sb-badge">{memories.length}</span>}
-            </button>
             <button className="sb-quick-btn" onClick={() => setShowCalc(true)} title="Calculator">
               <CalcIcon /><span>Calc</span>
             </button>
-            <button className="sb-quick-btn" onClick={() => setShowTimer(true)} title="Focus Timer">
-              <TimerIcon /><span>Timer</span>
-            </button>
           </div>
           <div className="sb-quick-row">
-            <button className="sb-quick-btn" onClick={() => setShowBooking(true)} title="Book Session" style={{ color: "var(--accent)" }}>
-              <CalendarIcon /><span>Book</span>
-            </button>
-            <button className="sb-quick-btn" onClick={() => setShowBookingHistory(true)} title="My Bookings">
-              <CalendarIcon /><span>History</span>
-            </button>
             <button className="sb-quick-btn" onClick={() => setShowScratchpad(true)} title="Scratchpad">
               <NoteIcon /><span>Notes</span>
             </button>
@@ -3031,7 +2671,6 @@ export default function App() {
               <button className="icon-btn" onClick={() => setShowSummary(true)} title="Summarize conversation"><BookmarkIcon /></button>
             )}
             <button className="icon-btn" onClick={() => setShowCalc(true)} title="Calculator"><CalcIcon /></button>
-            <button className="icon-btn" onClick={() => setShowTimer(true)} title="Focus Timer"><TimerIcon /></button>
             <button className="icon-btn" onClick={() => setChatSearchOpen(v => !v)} title="Search (Ctrl+F)"><SearchIcon /></button>
             <button className="icon-btn" onClick={() => setShowSysPrompt(true)} title="Instructions"><BotIcon /></button>
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="Toggle theme">
@@ -3094,7 +2733,6 @@ export default function App() {
               )}
               <div className="welcome-cards">
                 {[
-                  { icon: <Calendar size={16} />, label: "Book a Session", sub: "Schedule tutoring & more", action: () => setShowBooking(true) },
                   { icon: <YTIcon />, label: "YouTube Notes", sub: "Paste any YouTube URL", action: () => setSelectedMode("youtube") },
                   { icon: <Paintbrush size={16} />, label: "Image Generation", sub: "Create AI images free", action: () => setInput("Generate an image of ") },
                   { icon: <GlobeIcon />, label: "Live Web Search", sub: "Real-time Google results", action: () => { setAutoWebSearch(true); setInput("Latest news today"); } },
@@ -3278,11 +2916,6 @@ export default function App() {
           {isWebMode && (
             <div className="sys-strip" style={{ background: "rgba(59,130,246,0.08)", borderColor: "rgba(59,130,246,0.2)", color: "#3b82f6" }}>
               <GlobeIcon /><span>Web Search Mode — fetching live results + page content for accuracy</span>
-            </div>
-          )}
-          {memories.length > 0 && (
-            <div className="sys-strip" style={{ background: "rgba(16,185,129,0.07)", borderColor: "rgba(16,185,129,0.2)", color: "#10b981", cursor: "pointer" }} onClick={() => setShowMemory(true)}>
-              <BrainIcon /><span>{memories.length} memor{memories.length === 1 ? "y" : "ies"} active — VetroAI remembers facts about you</span>
             </div>
           )}
           {input.length > 0 && (
