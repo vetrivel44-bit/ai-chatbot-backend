@@ -14,6 +14,7 @@ const chatLimiter = rateLimit({
   limit: 40,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false }, // Disable on Render (proxy handled by platform)
   handler: (_req, res) => errorResponse(res, "Too many chat requests. Please slow down.", 429),
 });
 
