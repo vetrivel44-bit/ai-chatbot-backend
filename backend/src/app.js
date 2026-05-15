@@ -38,15 +38,18 @@ app.use(
   })
 );
 
-app.use(require("./middleware/debugMiddleware"));
+if (config.nodeEnv === "development" && !process.env.RENDER) {
+  app.use(require("./middleware/debugMiddleware"));
+}
 
-app.get("/health", (_req, res) =>
-  successResponse(res, "Service is healthy", {
+app.get("/health", (_req, res) => {
+  logger.info("health.check", { env: config.nodeEnv, render: !!process.env.RENDER });
+  return successResponse(res, "Service is healthy", {
     backend: "online",
     uptime: process.uptime(),
     providers: require("./services/ProviderManager").getStats()
-  })
-);
+  });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
