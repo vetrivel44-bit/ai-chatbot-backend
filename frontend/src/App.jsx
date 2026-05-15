@@ -3264,23 +3264,6 @@ export default function App() {
 
         {/* INPUT AREA */}
         <div className="input-area">
-          {/* Live Thinking Status */}
-          {(isLoading || isTyping) && (
-            <div className="thinking-above-input">
-              <ThinkingIndicator 
-                isVisible={true}
-                customStatuses={
-                  (streamStatus !== "idle" && streamStatus !== "streaming" && streamStatus !== "preparing")
-                    ? [streamStatus]
-                    : (isWebSearching 
-                        ? ['Searching the Web', 'Fetching Page Content', 'Analyzing Results', 'Synthesizing Information', 'Preparing Response']
-                        : isYtFetching
-                          ? ['Fetching Transcript', 'Analyzing Video', 'Generating Notes', 'Preparing Summary']
-                          : undefined)
-                }
-              />
-            </div>
-          )}
           {systemPrompt && (
             <div className="sys-strip">
               <BotIcon /><span>{t.systemPromptBadge}: {systemPrompt.slice(0, 55)}{systemPrompt.length > 55 ? "…" : ""}</span>

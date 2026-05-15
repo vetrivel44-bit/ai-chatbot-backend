@@ -178,8 +178,9 @@ async function chat(req, res) {
 
   // Set up SSE headers
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Important for Netlify/Nginx proxies
   res.flushHeaders?.();
 
   const heartbeat = setInterval(() => { res.write(": ping\n\n"); }, 12000);
