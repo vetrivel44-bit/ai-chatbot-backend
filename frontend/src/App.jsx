@@ -1942,7 +1942,7 @@ export default function App() {
       }
     }
     try {
-      const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/signup";
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/signup";
       const body = authMode === "login"
         ? { email: authEmail, password: authPassword }
         : { email: authEmail, password: authPassword, name: authName.trim() };
