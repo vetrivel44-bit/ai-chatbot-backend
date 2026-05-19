@@ -1,4 +1,4 @@
-import HeroSummary from './HeroSummary';
+﻿import HeroSummary from './HeroSummary';
 import HighlightAlert from './HighlightAlert';
 import ComparisonCards from './ComparisonCards';
 import ComparisonTable from './ComparisonTable';
@@ -63,7 +63,7 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
     if (!text) return [];
     const sections = [];
 
-    // MUST BE FIRST — extract known JSON blocks before anything else
+    // MUST BE FIRST â€” extract known JSON blocks before anything else
     const { sections: jsonSections, remaining } = extractKnownJsonBlocks(text);
     sections.push(...jsonSections);
     let remainingText = remaining;
@@ -197,27 +197,11 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
       remainingText = remainingText.replace(heroMatch[0], '').trim();
     }
 
-    // 3. Global Location Detection (Fallback if no JSON location)
-    if (!sections.some(s => s.type === 'location')) {
-      // Catch "[Place] is a [city/town/etc]" or "institution called [Place] located in"
-      // Handles optional markdown like **Name** or _Name_
-      const locRegex = /(?:^|\n|#|called|regarding)\s*[*_]*([A-Z][A-Za-z0-9&'’\.\-\s,]+?)[*_]*\s*(?:is a (?:city|town|village|district|place|region|state|country|school|institution|hospital|hotel|mall|restaurant|park|temple|monument|landmark|beach)|is (?:located|situated|found) in|also known as|Here is the address:|Location:)/i;
-      const locMatch = remainingText.match(locRegex);
-      
-      if (locMatch) {
-        sections.push({
-          type: 'location',
-          place: locMatch[1].trim(),
-          summary: `Exploring ${locMatch[1]}...`,
-          coordinates: null,
-          details: [],
-          delay: 0.3
-        });
-      }
-    }
+    // 3. Global Location Detection - DISABLED.
+    // Maps only render when AI explicitly outputs a JSON block with type='location'.
 
     // 4. Extract Alert Boxes
-    const alertRegex = /> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n> (.+)|(⚠️|✅|❌|ℹ️) (.+)/gi;
+    const alertRegex = /> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n> (.+)|(\u26a0\ufe0f|\u2705|\u274c|\u2139\ufe0f) (.+)/gi;
     let alertMatch;
     while ((alertMatch = alertRegex.exec(remainingText)) !== null) {
       let type = 'info';
@@ -231,66 +215,24 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
       } else {
         const emoji = alertMatch[3];
         content = alertMatch[4];
-        if (emoji === '⚠️') type = 'warning';
-        else if (emoji === '✅') type = 'success';
-        else if (emoji === '❌') type = 'danger';
+        if (emoji === '\u26a0\ufe0f') type = 'warning';
+        else if (emoji === '\u2705') type = 'success';
+        else if (emoji === '\u274c') type = 'danger';
       }
       sections.push({ type: 'alert', alertType: type, content, delay: 0.2 + (sections.length * 0.1) });
     }
     remainingText = remainingText.replace(alertRegex, '').trim();
 
-    // 5. Extract Block Sections (Comparison, Metrics, Timeline)
-    const blockRegex = /## ([^\n]+)\n\n(.*?)(?=\n\n##|$)/gs;
-    let blockMatch;
-    while ((blockMatch = blockRegex.exec(remainingText)) !== null) {
-      const title = blockMatch[1];
-      const content = blockMatch[2].trim();
-      const lowerTitle = title.toLowerCase();
+    // 5. Section detection for comparison/metrics/timeline â€” DISABLED for auto-detection.
+    // These components now ONLY render when the AI explicitly outputs structured JSON blocks.
+    // Auto-detecting section headers caused e.g. "## Key Features" to become cards on every answer.
 
-      if (lowerTitle.includes('vs') || lowerTitle.includes('comparison')) {
-        const leftMatch = content.match(/\*\*([^\*]+)\*\*\n(.*?)(?=\n\n\*\*|$)/s);
-        const rightMatch = content.match(/(?<=\n\n|^)\*\*([^\*]+)\*\*\n(.*?)$/s);
-        if (leftMatch && rightMatch) {
-          sections.push({ type: 'comparison', left: { title: leftMatch[1], description: leftMatch[2].trim() }, right: { title: rightMatch[1], description: rightMatch[2].trim() }, delay: 0.4 });
-          remainingText = remainingText.replace(blockMatch[0], '').trim();
-          continue;
-        }
-      }
-
-      if (lowerTitle.includes('metrics') || lowerTitle.includes('stats')) {
-        const metrics = [];
-        content.split('\n').forEach(line => {
-          const m = line.match(/[-*•]?\s*\*\*([^*]+)\*\*:\s*(.+)/) || line.match(/[-*•]?\s*([^:]+):\s*(.+)/);
-          if (m) metrics.push({ label: m[1], value: m[2] });
-        });
-        if (metrics.length > 0) {
-          sections.push({ type: 'metrics', metrics, delay: 0.5 });
-          remainingText = remainingText.replace(blockMatch[0], '').trim();
-          continue;
-        }
-      }
-
-      if (lowerTitle.includes('step') || lowerTitle.includes('timeline')) {
-        const steps = [];
-        content.split(/\n(?=\d+\. )/).forEach(block => {
-          const m = block.match(/(\d+)\. \*\*([^*]+)\*\*[:\n]+(.*?)$/s) || block.match(/(\d+)\. ([^\n]+)\n+(.*?)$/s);
-          if (m) steps.push({ title: m[2], description: m[3].trim() });
-        });
-        if (steps.length > 0) {
-          sections.push({ type: 'timeline', steps, delay: 0.6 });
-          remainingText = remainingText.replace(blockMatch[0], '').trim();
-          continue;
-        }
-      }
-    }
-
-    // 6. Remaining Text as Main Content
+    // 6. Remaining text renders as clean markdown.
     if (remainingText.length > 10) {
       sections.push({
         type: 'section',
-        title: 'Analysis',
         content: remainingText,
-        delay: 0.2
+        delay: 0.1
       });
     }
     return sections;
