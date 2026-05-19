@@ -5239,3 +5239,7 @@ textarea,input{font-family:var(--font);outline:none;border:none;background:trans
   color: #8c959f;
 }
 
+/* Theme adaptation for custom transparent logo */
+[data-theme="dark"] .vetroai-logo {
+  filter: invert(0.95) brightness(1.2);
+}

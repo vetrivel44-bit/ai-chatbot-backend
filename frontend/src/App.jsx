@@ -80,7 +80,7 @@ const VetroSpark = ({ size = 24, color = "currentColor", className = "" }) => (
     alt="VetroAI Logo" 
     width={size} 
     height={size} 
-    className={className} 
+    className={`vetroai-logo ${className}`} 
     style={{ borderRadius: '24%', objectFit: 'contain', display: 'inline-block', verticalAlign: 'middle' }}
   />
 );
