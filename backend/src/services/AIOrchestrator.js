@@ -199,6 +199,7 @@ To make your response highly structured, clean, and professional:
             ? `Model ${currentProviderName} is temporarily busy. Switching to another AI model…`
             : `Issue with ${currentProviderName}. Switching to another model…`;
           
+          this.sendVetroEvent(res, "clear", "");
           this.sendVetroEvent(res, "status", friendlyMsg);
           currentProviderName = nextProvider;
           

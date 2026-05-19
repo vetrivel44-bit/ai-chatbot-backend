@@ -2379,12 +2379,15 @@ export default function App() {
           try {
             const { type, data } = JSON.parse(raw);
             if (type === "content" && data) {
-              accumulated += data;
-              onChunk(accumulated);
+               accumulated += data;
+               onChunk(accumulated);
+            } else if (type === "clear") {
+               accumulated = "";
+               onChunk("");
             } else if (type === "status" && data) {
-              onStatus(data);
+               onStatus(data);
             } else if (type === "error" && data) {
-              onError(data);
+               onError(data);
             }
           } catch (err) {
             console.error("SSE parse error:", err, raw);
