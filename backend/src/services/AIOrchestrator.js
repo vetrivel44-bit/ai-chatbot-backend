@@ -281,8 +281,13 @@ or
   normalizeChunk(chunk, provider) {
     if (!chunk) return null;
 
-    // 1. Handle Object Chunks (SDK Deltas from Groq)
-    if (typeof chunk === "object" && !Buffer.isBuffer(chunk)) {
+    // Decode binary buffers/arrays into strings first
+    if (chunk instanceof Uint8Array || Buffer.isBuffer(chunk)) {
+      chunk = new TextDecoder().decode(chunk);
+    }
+
+    // 1. Handle SDK Object Chunks (e.g. Groq SDK returned choices)
+    if (typeof chunk === "object") {
       const delta = chunk.choices?.[0]?.delta;
       if (delta?.content) return delta.content;
       
@@ -293,8 +298,8 @@ or
       return null;
     }
 
-    // 2. Handle String/Buffer Chunks (Mistral, SambaNova, Gemini raw)
-    const rawText = chunk.toString();
+    // 2. Handle String Chunks (Mistral, SambaNova, Gemini raw text stream)
+    const rawText = chunk;
     
     // Handle Gemini raw JSON stream (often wrapped in [ ])
     if (provider === "gemini") {
