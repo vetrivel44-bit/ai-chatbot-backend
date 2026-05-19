@@ -102,6 +102,26 @@ or
       sys += "\n\nYou are a senior data analyst. Provide deep insights, identify trends, and ALWAYS include a visualization if data allows.";
     }
 
+    sys += `
+
+## CLAUDE-STYLE RESPONSE FORMATTING & STRUCTURE
+To make your response highly structured, clean, and professional:
+1. **Formatting**:
+   - Begin directly with the answer. Avoid conversational prefix/postfix filler (e.g., "Here is the comparison...", "Sure, I can help you with that...").
+   - Use clear markdown headers (\`##\` and \`###\`) to separate logical sections.
+   - Use bolding (\`**bold**\`) to highlight key terms and make responses scannable.
+   - Use bullet points (\`-\`) or numbered lists (\`1.\`) with clean spacing for list items.
+   - Use Markdown Tables for comparisons, feature sets, or metrics rather than long lists of bullet points.
+2. **Alerts & Callouts**:
+   - Use GitHub-style blockquotes for highlights:
+     > [!NOTE]
+     > Use for extra context, tips, or interesting explanations.
+
+     > [!WARNING]
+     > Use for cautions, compatibility notes, or potential pitfalls.
+3. **Tone**: Clear, objective, authoritative, and helpful. Never apologize unnecessarily.
+`;
+
     sys += "\n\n⚡ OUTPUT COMPLETENESS: Finish your response fully. Close all code fences. Never end mid-sentence. Ensure all JSON blocks are valid and complete.";
 
     return sys;
@@ -199,15 +219,46 @@ or
 
   async pipeStream(stream, res, provider) {
     let fullContent = "";
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const processTextChunk = (textChunk) => {
+      buffer += textChunk;
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // Keep partial line
+      
+      let chunkContent = "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const content = this.normalizeChunk(line, provider);
+        if (content) {
+          chunkContent += content;
+        }
+      }
+      return chunkContent;
+    };
 
     try {
-      // 1. Handle Async Iterables (SDKs like Groq, Mistral)
+      // 1. Handle Async Iterables (SDKs or Web ReadableStreams)
       if (Symbol.asyncIterator in stream) {
         for await (const chunk of stream) {
-          const content = this.normalizeChunk(chunk, provider);
-          if (content) {
-            fullContent += content;
-            this.sendVetroEvent(res, "content", content);
+          // If it is an SDK object payload (e.g. from Groq SDK), process directly
+          if (typeof chunk === "object" && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+            const content = this.normalizeChunk(chunk, provider);
+            if (content) {
+              fullContent += content;
+              this.sendVetroEvent(res, "content", content);
+            }
+          } else {
+            // Otherwise, decode binary/text data and parse by line
+            const text = (chunk instanceof Uint8Array || Buffer.isBuffer(chunk))
+              ? decoder.decode(chunk, { stream: true })
+              : String(chunk);
+            const content = processTextChunk(text);
+            if (content) {
+              fullContent += content;
+              this.sendVetroEvent(res, "content", content);
+            }
           }
         }
       }
@@ -215,45 +266,49 @@ or
       else if (stream.on) {
         await new Promise((resolve, reject) => {
           stream.on("data", (chunk) => {
-            const content = this.normalizeChunk(chunk, provider);
-            if (content) {
-              fullContent += content;
-              this.sendVetroEvent(res, "content", content);
+            if (typeof chunk === "object" && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+              const content = this.normalizeChunk(chunk, provider);
+              if (content) {
+                fullContent += content;
+                this.sendVetroEvent(res, "content", content);
+              }
+            } else {
+              const text = (chunk instanceof Uint8Array || Buffer.isBuffer(chunk))
+                ? decoder.decode(chunk, { stream: true })
+                : String(chunk);
+              const content = processTextChunk(text);
+              if (content) {
+                fullContent += content;
+                this.sendVetroEvent(res, "content", content);
+              }
             }
           });
           stream.on("end", resolve);
           stream.on("error", reject);
         });
       }
+      // 3. Handle Web Streams with getReader
       else if (stream.getReader) {
         const reader = stream.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop(); // Keep partial line
-          
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const content = this.normalizeChunk(line, provider);
-            if (content) {
-              fullContent += content;
-              this.sendVetroEvent(res, "content", content);
-            }
-          }
-        }
-        
-        if (buffer && buffer.trim()) {
-          const content = this.normalizeChunk(buffer, provider);
+          const text = decoder.decode(value, { stream: true });
+          const content = processTextChunk(text);
           if (content) {
             fullContent += content;
             this.sendVetroEvent(res, "content", content);
           }
+        }
+      }
+
+      // Flush remaining buffer
+      if (buffer && buffer.trim()) {
+        const content = this.normalizeChunk(buffer, provider);
+        if (content) {
+          fullContent += content;
+          this.sendVetroEvent(res, "content", content);
         }
       }
     } catch (err) {
