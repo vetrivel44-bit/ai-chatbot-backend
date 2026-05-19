@@ -76,7 +76,7 @@ const extractSourceUrls = (text) => {
 // ─── CLAUDE-STYLE VETROAI LOGO (Serif Spark) ──────────────────────────────────
 const VetroSpark = ({ size = 24, color = "currentColor", className = "" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className} xmlns="http://www.w3.org/2000/svg">
-    <path d="M11.996 1.5c.219 4.394 3.655 7.828 8.054 8.046v.908c-4.399.218-7.835 3.652-8.054 8.046h-.908c-.219-4.394-3.655-7.828-8.054-8.046v-.908c4.399-.218 7.835-3.652 8.054-8.046h.908z" />
+    <text x="50%" y="64%" textAnchor="middle" dominantBaseline="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize={size * 1.8} fontWeight="normal" fill={color}>*</text>
   </svg>
 );
 
