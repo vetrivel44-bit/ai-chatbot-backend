@@ -2326,6 +2326,14 @@ export default function App() {
     abortRef.current?.abort();
     setIsLoading(false); setIsTyping(false); setIsWebSearching(false); setIsYtFetching(false);
     setStreamingContent(""); setIsContinuing(false); setStreamStatus("idle");
+    setMessages(prev => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      if (last.role === "assistant" && !last.content) {
+        return prev.slice(0, -1);
+      }
+      return prev;
+    });
   };
 
   const insertFmt = (pre, suf = "") => {
@@ -2387,6 +2395,16 @@ export default function App() {
     setIsLoading(true); setIsTyping(true); setStreamStatus("preparing"); scrollToBottom(); stopSpeak();
     setFollowUps([]); setIsContinuing(false);
 
+    const ts     = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const emptyAssistantMsg = {
+      role: "assistant",
+      content: "",
+      timestamp: ts,
+      provider: selectedProvider,
+      ytInfo: ytContext ? { title: ytContext.title, author: ytContext.author, videoId: ytContext.videoId } : null,
+    };
+    setMessages([...hist, emptyAssistantMsg]);
+
     const userQuery = hist[hist.length - 1]?.content || "";
     const isFirstMsg = hist.filter(m => m.role === "user").length === 1;
 
@@ -2419,15 +2437,8 @@ export default function App() {
       }
 
       const reader = res.body.getReader();
-      const ts     = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
       setIsTyping(false);
-      setMessages(prev => [...prev, {
-        role: "assistant", content: "", timestamp: ts,
-        provider: selectedProvider,
-        ytInfo: ytContext ? { title: ytContext.title, author: ytContext.author, videoId: ytContext.videoId } : null,
-      }]);
-
       setStreamStatus("streaming");
       const bot = await readSSEStream(
         reader, 
@@ -2462,17 +2473,40 @@ export default function App() {
       generateFollowUps(bot, userQuery);
 
     } catch (err) {
-      if (err.name === "AbortError") return;
+      if (err.name === "AbortError") {
+        setMessages(prev => {
+          if (prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          if (last.role === "assistant" && !last.content) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+        return;
+      }
       addDebugLog("Chat.catch", { reqId, error: err.message });
       setIsLoading(false); setStreamStatus("failed");
       addToast(err.message || "Connection issue", "error");
       
       const ts2 = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      setMessages(prev => [...prev, { 
-        role: "assistant", 
-        content: `I encountered an issue: "${err.message}". Please try again.`, 
-        timestamp: ts2 
-      }]);
+      setMessages(prev => {
+        const u = [...prev];
+        const lastIdx = u.map(m => m.role).lastIndexOf("assistant");
+        if (lastIdx !== -1 && !u[lastIdx].content) {
+          u[lastIdx] = { 
+            role: "assistant", 
+            content: `I encountered an issue: "${err.message}". Please try again.`, 
+            timestamp: ts2 
+          };
+        } else {
+          u.push({
+            role: "assistant", 
+            content: `I encountered an issue: "${err.message}". Please try again.`, 
+            timestamp: ts2 
+          });
+        }
+        return u;
+      });
     } finally {
       setSelFile(null); setFilePreview(null);
     }
@@ -3063,13 +3097,25 @@ export default function App() {
                         </div>
                       )}
                       {msg.role === "assistant" && (idx === messages.length - 1 && isLoading) ? (
-                        <StructuredResponseRenderer 
-                          response={(streamingContent || msg.content) + "▍"} 
-                          onSubmitCode={(code) => {
-                            setInput(code);
-                            textareaRef.current?.focus();
-                          }}
-                        />
+                        !(streamingContent || msg.content) ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {(isWebSearching || isYtFetching) && (
+                              <div className="web-search-badge" style={{ display: 'inline-flex', width: 'fit-content', gap: 6, margin: 0, padding: '4px 10px', background: 'rgba(217,119,87,0.06)', border: '1px solid rgba(217,119,87,0.15)', color: 'var(--accent)' }}>
+                                <GlobeIcon style={{ animation: 'spin 2.5s linear infinite', width: 14, height: 14 }} /> 
+                                <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{isWebSearching ? "Searching the Web..." : "Fetching video..."}</span>
+                              </div>
+                            )}
+                            <ThinkingIndicator isVisible={true} />
+                          </div>
+                        ) : (
+                          <StructuredResponseRenderer 
+                            response={(streamingContent || msg.content) + "▍"} 
+                            onSubmitCode={(code) => {
+                              setInput(code);
+                              textareaRef.current?.focus();
+                            }}
+                          />
+                        )
                       ) : msg.role === "assistant" ? (
                         <StructuredResponseRenderer 
                           response={msg.content} 
@@ -3137,15 +3183,6 @@ export default function App() {
               </div>
             );
           })}
-
-          {isTyping && (
-            <div className="msg assistant">
-              <div className="msg-av bot-av" style={{ background: "transparent" }}>{activePersona?.avatar || <VetroSpark size={22} color="var(--accent)" />}</div>
-              <div className="msg-body">
-                <ThinkingIndicator isVisible={true} />
-              </div>
-            </div>
-          )}
           <div style={{ height: 20 }} />
         </div>
 
