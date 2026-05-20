@@ -3217,55 +3217,56 @@ export default function App() {
             <button className={`mode-pill${isWebMode || isDeepSearch ? " web-mode-pill" : isYtMode ? " yt-mode-pill" : ""}`} onClick={() => setShowModelPicker(true)} style={{ cursor: "pointer", border: "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <ModelIcon id={selectedMode} size={14} />
-                <span>{MODES_LIST.find(m => m.id === selectedMode)?.name}</span>
+                <span className="mode-pill-name">{MODES_LIST.find(m => m.id === selectedMode)?.name}</span>
               </div>
               {(isWebMode || isDeepSearch) && <span className="web-live-dot" />}
               {isYtMode && <span className="web-live-dot" style={{ background: "#ff0000" }} />}
               <ArrowDown size={12} style={{ marginLeft: 4 }} />
             </button>
             {autoWebSearch && !isWebMode && !isDeepSearch && !isYtMode && (
-              <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, opacity: 0.7 }}>
+              <div className="mode-pill ch-desktop-pill" style={{ fontSize: "0.7rem", gap: 4, opacity: 0.7 }}>
                 <GlobeIcon /> Auto
               </div>
             )}
             {isContinuing && (
-              <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, color: "var(--accent)", background: "rgba(var(--accent-rgb),0.1)" }}>
+              <div className="mode-pill ch-desktop-pill" style={{ fontSize: "0.7rem", gap: 4, color: "var(--accent)", background: "rgba(var(--accent-rgb),0.1)" }}>
                 <WebSpinIcon /> {streamStatus === "recovering" ? "Recovering..." : "Expanding answer…"}
               </div>
             )}
             {streamStatus !== "idle" && streamStatus !== "completed" && !isTyping && (
-              <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, color: "var(--accent)", background: "rgba(var(--accent-rgb),0.1)" }}>
+              <div className="mode-pill ch-desktop-pill" style={{ fontSize: "0.7rem", gap: 4, color: "var(--accent)", background: "rgba(var(--accent-rgb),0.1)" }}>
                 <WebSpinIcon /> {streamStatus.charAt(0).toUpperCase() + streamStatus.slice(1)}...
               </div>
             )}
-            {/* Backend Health Status */}
-            <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, background: backendStatus === "online" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", color: backendStatus === "online" ? "#10b981" : "#ef4444" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: backendStatus === "online" ? "#10b981" : "#ef4444" }} />
-              API
-            </div>
-            {/* Provider Status */}
-            {Object.entries(providerStatus || {}).map(([name, status]) => (
-              <div key={name} className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, background: status === "healthy" ? "rgba(16,185,129,0.1)" : status === "degraded" ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)", color: status === "healthy" ? "#10b981" : status === "degraded" ? "#f59e0b" : "#ef4444" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: status === "healthy" ? "#10b981" : status === "degraded" ? "#f59e0b" : "#ef4444" }} />
-                {name}
+            {/* Backend Health + Provider Status — hidden on mobile to prevent overflow */}
+            <div className="ch-status-pills">
+              <div className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, background: backendStatus === "online" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", color: backendStatus === "online" ? "#10b981" : "#ef4444" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: backendStatus === "online" ? "#10b981" : "#ef4444" }} />
+                API
               </div>
-            ))}
+              {Object.entries(providerStatus || {}).map(([name, status]) => (
+                <div key={name} className="mode-pill" style={{ fontSize: "0.7rem", gap: 4, background: status === "healthy" ? "rgba(16,185,129,0.1)" : status === "degraded" ? "rgba(245,158,11,0.1)" : "rgba(239,68,68,0.1)", color: status === "healthy" ? "#10b981" : status === "degraded" ? "#f59e0b" : "#ef4444" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: status === "healthy" ? "#10b981" : status === "degraded" ? "#f59e0b" : "#ef4444" }} />
+                  {name}
+                </div>
+              ))}
+            </div>
           </div>
           <div className="ch-right">
-            <button className="icon-btn" onClick={() => setShowPersona(true)} title="AI Persona" style={{ color: activePersona?.id !== "default" ? "var(--accent)" : undefined }}>
+            <button className="icon-btn ch-hide-sm" onClick={() => setShowPersona(true)} title="AI Persona" style={{ color: activePersona?.id !== "default" ? "var(--accent)" : undefined }}>
               <span style={{ fontSize: "1rem" }}>{activePersona?.avatar || "🤖"}</span>
             </button>
             {messages.length > 1 && (
-              <button className="icon-btn" onClick={() => setShowSummary(true)} title="Summarize conversation"><BookmarkIcon /></button>
+              <button className="icon-btn ch-hide-sm" onClick={() => setShowSummary(true)} title="Summarize conversation"><BookmarkIcon /></button>
             )}
-            <button className="icon-btn" onClick={() => setShowCalc(true)} title="Calculator"><CalcIcon /></button>
+            <button className="icon-btn ch-hide-xs" onClick={() => setShowCalc(true)} title="Calculator"><CalcIcon /></button>
             <button className="icon-btn" onClick={() => setChatSearchOpen(v => !v)} title="Search (Ctrl+F)"><SearchIcon /></button>
-            <button className="icon-btn" onClick={() => setShowSysPrompt(true)} title="Instructions"><BotIcon /></button>
+            <button className="icon-btn ch-hide-sm" onClick={() => setShowSysPrompt(true)} title="Instructions"><BotIcon /></button>
             <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="Toggle theme">
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
             {messages.length > 0 && (
-              <button className="share-btn" onClick={() => setShowShare(true)}><ShareIcon /><span>{t.share}</span></button>
+              <button className="share-btn" onClick={() => setShowShare(true)}><ShareIcon /><span className="share-btn-label">{t.share}</span></button>
             )}
           </div>
         </header>
