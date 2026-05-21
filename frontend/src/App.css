@@ -6615,3 +6615,75 @@ textarea,input{font-family:var(--font);outline:none;border:none;background:trans
   opacity: 1;
 }
 
+/* --- SPACES SIDEBAR --- */
+.spaces-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.spaces-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.spaces-header .icon-btn {
+  padding: 2px;
+  color: var(--ink-3);
+}
+.spaces-header .icon-btn:hover {
+  color: var(--ink);
+}
+
+.spaces-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.space-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.space-item:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
+.space-item.active {
+  background: rgba(255,255,255,0.08);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.space-edit-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--ink-4);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  padding: 4px;
+}
+.space-item:hover .space-edit-btn {
+  opacity: 1;
+}
+.space-edit-btn:hover {
+  color: var(--ink);
+}
+

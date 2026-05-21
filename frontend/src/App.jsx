@@ -1610,6 +1610,74 @@ function SummaryPanel({ messages, onClose, addToast }) {
   );
 }
 
+// ─── SPACE MODAL ────────────────────────────────────────────────────────────
+function SpaceModal({ space, onSave, onClose, onDelete }) {
+  const [name, setName] = useState(space ? space.name : "");
+  const [mode, setMode] = useState(space ? space.mode : MODES_LIST[0].id);
+  const [prompt, setPrompt] = useState(space ? space.systemPrompt : "");
+  const [files, setFiles] = useState(space ? space.files || [] : []);
+
+  const handleFileUpload = (e) => {
+    const newFiles = Array.from(e.target.files);
+    newFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setFiles(prev => [...prev, { name: file.name, type: file.type, content: ev.target.result }]);
+      };
+      reader.readAsText(file); // Assume text files for simplicity
+    });
+  };
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 500, maxWidth: "90%" }}>
+        <div className="modal-topbar">
+          <h3 className="modal-title">{space ? "Edit Space" : "New Space"}</h3>
+          <button className="modal-x" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="modal-content" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label className="provider-label">Name</label>
+            <input className="sys-prompt-textarea" style={{ minHeight: "auto", height: 40 }} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Coding Space" />
+          </div>
+          <div>
+            <label className="provider-label">Default Mode</label>
+            <select className="sys-prompt-textarea" style={{ minHeight: "auto", height: 40 }} value={mode} onChange={e => setMode(e.target.value)}>
+              {MODES_LIST.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="provider-label">System Prompt / Instructions</label>
+            <textarea className="sys-prompt-textarea" style={{ height: 120 }} value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="You are a Python expert..." />
+          </div>
+          <div>
+            <label className="provider-label">Knowledge Files ({files.length})</label>
+            <input type="file" multiple onChange={handleFileUpload} style={{ marginBottom: 8, fontSize: "0.85rem", color: "var(--ink-2)" }} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {files.map((f, i) => (
+                <div key={i} className="mode-pill" style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px" }}>
+                  <FileText size={12} /> {f.name}
+                  <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", color: "var(--ink-4)", cursor: "pointer", display: "flex", alignItems: "center" }}><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between" }}>
+          {space ? <button className="btn-ghost" onClick={() => onDelete(space.id)} style={{ color: "#ef4444" }}>Delete Space</button> : <div></div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-ghost" onClick={onClose}>Cancel</button>
+            <button className="btn-primary" onClick={() => {
+              if (!name.trim()) return;
+              onSave({ id: space ? space.id : Date.now().toString(), name, mode, systemPrompt: prompt, files });
+            }}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── WORKSPACE POPUP ────────────────────────────────────────────────────────────
 
 function WorkspacePopup({ currentMode, currentProvider, onSelectMode, onSelectProvider, onClose }) {
@@ -1681,9 +1749,16 @@ function WorkspacePopup({ currentMode, currentProvider, onSelectMode, onSelectPr
 }
 
 // Helper to format real-time SSE stream status updates
-const getStatusLabel = (status) => {
+const getStatusLabel = (status, mode) => {
   if (!status || status === "preparing" || status === "streaming" || status === "idle") {
-    return "Thinking";
+    switch(mode) {
+      case "deep_search": return "Searching sources…";
+      case "debugger": return "Reading your code…";
+      case "summarize": return "Condensing…";
+      case "analyst": return "Crunching data…";
+      case "multi_ai": return "Consulting experts…";
+      default: return "Thinking…";
+    }
   }
   return status;
 };
@@ -1780,7 +1855,11 @@ export default function App() {
   const [pinnedIds, setPinnedIds]           = useState(() => JSON.parse(localStorage.getItem("vetroai_pins") || "[]"));
   const [isSidebarOpen, setIsSidebarOpen]   = useState(false);
   const [confirmDelete, setConfirmDelete]   = useState(null);
-
+  // ── Spaces / Projects ─────────────────────────────────────────────────────────
+  const [spaces, setSpaces] = useState([]);
+  const [currentSpaceId, setCurrentSpaceId] = useState(null);
+  const [showSpaceModal, setShowSpaceModal] = useState(false);
+  const [editingSpace, setEditingSpace] = useState(null);
   // ── Chat ──────────────────────────────────────────────────────────────────────
   const [messages, setMessages]             = useState([]);
   const [input, setInput]                   = useState("");
@@ -2121,6 +2200,8 @@ export default function App() {
   useEffect(() => {
     if (user) {
       try { const s = localStorage.getItem("vetroai_sessions_" + user); if (s) setSessions(JSON.parse(s) || []); } catch { setSessions([]); }
+      try { const sp = localStorage.getItem("vetroai_spaces_" + user); if (sp) setSpaces(JSON.parse(sp) || []); } catch { setSpaces([]); }
+      try { const cSpace = localStorage.getItem("vetroai_current_space_" + user); if (cSpace) setCurrentSpaceId(cSpace); } catch { setCurrentSpaceId(null); }
     }
   }, [user]);
 
@@ -2134,7 +2215,7 @@ export default function App() {
         const id = Date.now().toString();
         setCurrentSessionId(id);
         setSessions((prev) => {
-          const list = [{ id, title, messages }, ...prev];
+          const list = [{ id, title, messages, spaceId: currentSpaceId }, ...prev];
           try { localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list)); } catch (err) { swallowError(err); }
           return list;
         });
@@ -2144,7 +2225,7 @@ export default function App() {
         const list = [...prev];
         const i = list.findIndex((s) => s.id === currentSessionId);
         if (i !== -1) list[i] = { ...list[i], messages };
-        else list.unshift({ id: currentSessionId, title, messages });
+        else list.unshift({ id: currentSessionId, title, messages, spaceId: currentSpaceId });
         try { localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list)); } catch (err) { swallowError(err); }
         return list;
       });
@@ -2175,7 +2256,7 @@ export default function App() {
     if (s) { setMessages(s.messages || []); setCurrentSessionId(id); stopSpeak(); setIsSidebarOpen(false); isScrolling.current = false; setFollowUps([]); }
   };
 
-  const newChat = useCallback(() => {
+  const newChat = useCallback((spaceIdOverride) => {
     requestIdRef.current += 1;
     abortRef.current?.abort();
     setMessages([]); setCurrentSessionId(null); setInput(""); stopSpeak();
@@ -2183,7 +2264,22 @@ export default function App() {
     setIsLoading(false); setIsTyping(false); setIsWebSearching(false); setIsYtFetching(false);
     setStreamingContent(""); setIsContinuing(false);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-  }, []);
+    const activeSpaceId = spaceIdOverride !== undefined && typeof spaceIdOverride === 'string' ? spaceIdOverride : (spaceIdOverride === null ? null : currentSpaceId);
+    if (activeSpaceId) {
+      const sp = spaces.find(s => s.id === activeSpaceId);
+      if (sp) {
+        setSelectedMode(sp.mode);
+        setSystemPrompt(sp.systemPrompt);
+      }
+    }
+  }, [currentSpaceId, spaces]);
+
+  const handleSwitchSpace = (spaceId) => {
+    setCurrentSpaceId(spaceId);
+    if (spaceId) localStorage.setItem("vetroai_current_space_" + user, spaceId);
+    else localStorage.removeItem("vetroai_current_space_" + user);
+    newChat(spaceId);
+  };
 
   const deleteSession = (id) => { setConfirmDelete({ id, message: "Delete this conversation? This cannot be undone." }); };
 
@@ -2239,7 +2335,8 @@ export default function App() {
 
   // ── Computed data ─────────────────────────────────────────────────────────────
   const { pinnedSessions, groupedSessions } = useMemo(() => {
-    const filtered = sessions.filter(s => s?.title?.toLowerCase().includes(histSearch.toLowerCase()));
+    const spaceMatch = s => currentSpaceId ? s.spaceId === currentSpaceId : (!s.spaceId || s.spaceId === "null");
+    const filtered = sessions.filter(s => spaceMatch(s) && s?.title?.toLowerCase().includes(histSearch.toLowerCase()));
     const pinned   = filtered.filter(s => pinnedIds.includes(s.id));
     const rest     = filtered.filter(s => !pinnedIds.includes(s.id));
     const groups   = {};
@@ -2531,9 +2628,22 @@ export default function App() {
     fd.append("reqId", reqId);
     fd.append("memories", JSON.stringify(memories));
 
-    // Pass custom system prompt to backend
-    if (systemPromptRef.current) {
-      fd.append("systemPrompt", systemPromptRef.current);
+    // Combine global system prompt with Space instructions and files
+    let finalSystemPrompt = systemPromptRef.current || "";
+    if (currentSpaceId) {
+      const space = spaces.find(s => s.id === currentSpaceId);
+      if (space) {
+        if (space.systemPrompt) {
+          finalSystemPrompt = `[SPACE INSTRUCTIONS]\n${space.systemPrompt}\n\n` + finalSystemPrompt;
+        }
+        if (space.files && space.files.length > 0) {
+          const filesContext = space.files.map(f => `--- FILE: ${f.name} ---\n${f.content}\n`).join("\n");
+          finalSystemPrompt += `\n\n[SPACE KNOWLEDGE FILES]\n${filesContext}`;
+        }
+      }
+    }
+    if (finalSystemPrompt.trim()) {
+      fd.append("systemPrompt", finalSystemPrompt.trim());
     }
 
     // Pass webSearch flag: true when autoWebSearch is on OR when in web_search / deep_search / research mode
@@ -3053,6 +3163,34 @@ export default function App() {
       <Toast toasts={toasts} />
 
       {showProfile   && <ProfileModal onClose={() => setShowProfile(false)} t={t} langCode={langCode} setLangCode={setLangCode} theme={theme} setTheme={setTheme} userInfo={userInfo} onProfileSaved={setProfileData} />}
+      {showSpaceModal && <SpaceModal
+        space={editingSpace}
+        onClose={() => setShowSpaceModal(false)}
+        onSave={(newSpace) => {
+          setSpaces(prev => {
+            const list = prev.some(s => s.id === newSpace.id) ? prev.map(s => s.id === newSpace.id ? newSpace : s) : [...prev, newSpace];
+            localStorage.setItem("vetroai_spaces_" + user, JSON.stringify(list));
+            return list;
+          });
+          setCurrentSpaceId(newSpace.id);
+          localStorage.setItem("vetroai_current_space_" + user, newSpace.id);
+          setShowSpaceModal(false);
+          addToast("Space saved!", "success");
+        }}
+        onDelete={(id) => {
+          setSpaces(prev => {
+            const list = prev.filter(s => s.id !== id);
+            localStorage.setItem("vetroai_spaces_" + user, JSON.stringify(list));
+            return list;
+          });
+          if (currentSpaceId === id) {
+            setCurrentSpaceId(null);
+            localStorage.removeItem("vetroai_current_space_" + user);
+          }
+          setShowSpaceModal(false);
+          addToast("Space deleted", "info");
+        }}
+      />}
       {showSysPrompt && <SysPromptModal onClose={() => setShowSysPrompt(false)} t={t} value={systemPrompt} setValue={setSystemPrompt} />}
       {showShare     && messages.length > 0 && <ShareModal onClose={() => setShowShare(false)} t={t} messages={messages} />}
       {showBookmarks && <BookmarksPanel bookmarks={bookmarks} onSelect={msg => setInput(msg.content)} onRemove={removeBookmark} onClose={() => setShowBookmarks(false)} t={t} />}
@@ -3158,7 +3296,23 @@ export default function App() {
 
         <button className="new-btn" onClick={newChat}><PlusIcon />{t.newChat}</button>
 
-
+        <div className="spaces-section">
+          <div className="spaces-header">
+            <span>Spaces</span>
+            <button className="icon-btn" onClick={() => { setEditingSpace(null); setShowSpaceModal(true); }}><PlusIcon size={14} /></button>
+          </div>
+          <div className="spaces-list">
+            <div className={`space-item${!currentSpaceId ? " active" : ""}`} onClick={() => handleSwitchSpace(null)}>
+              <Globe size={14} /> General
+            </div>
+            {spaces.map(sp => (
+              <div key={sp.id} className={`space-item${currentSpaceId === sp.id ? " active" : ""}`} onClick={() => handleSwitchSpace(sp.id)}>
+                <ModelIcon id={sp.mode} size={14} /> {sp.name}
+                <button className="space-edit-btn" onClick={(e) => { e.stopPropagation(); setEditingSpace(sp); setShowSpaceModal(true); }}><Paintbrush size={12} /></button>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div className="sb-search">
           <SearchIcon />
@@ -3532,7 +3686,7 @@ export default function App() {
                                 <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{isWebSearching ? "Searching the Web..." : "Fetching video..."}</span>
                               </div>
                             )}
-                            <ThinkingIndicator isVisible={true} status={getStatusLabel(streamStatus)} />
+                            <ThinkingIndicator isVisible={true} status={getStatusLabel(streamStatus, selectedMode)} />
                           </div>
                         ) : (
                           <StructuredResponseRenderer
