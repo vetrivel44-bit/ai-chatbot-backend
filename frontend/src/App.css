@@ -5787,6 +5787,257 @@ textarea,input{font-family:var(--font);outline:none;border:none;background:trans
   gap: 8px;
 }
 
+@supports (padding: env(safe-area-inset-left)) {
+  @media (max-width: 768px) {
+    .sidebar {
+      padding-left: max(12px, env(safe-area-inset-left));
+    }
+  }
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   VETROAI — MOBILE BOTTOM NAVIGATION
+   Hidden on desktop, visible on mobile (≤768px)
+   ════════════════════════════════════════════════════════════════ */
+
+/* Hidden by default on desktop */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* --- Bottom Navigation Bar --- */
+  .mobile-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    z-index: 30;
+    padding: 0 4px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+  }
+
+  [data-theme="dark"] .mobile-bottom-nav {
+    background: rgba(25, 25, 25, 0.97);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+  }
+
+  .mbn-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: transparent;
+    border: none;
+    color: var(--ink-4);
+    padding: 6px 8px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    transition: all var(--tr);
+    flex: 1;
+    min-height: 50px;
+    min-width: 44px;
+    font-size: 0;
+  }
+
+  .mbn-btn span {
+    font-size: 0.58rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    color: inherit;
+    font-family: var(--font);
+  }
+
+  .mbn-btn:hover,
+  .mbn-btn:focus {
+    color: var(--ink);
+    background: var(--bg-hover);
+  }
+
+  .mbn-btn.active {
+    color: var(--accent);
+  }
+
+  .mbn-btn:active {
+    transform: scale(0.91);
+  }
+
+  .mbn-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  /* Input area sits above bottom nav — padding-bottom adds space for the fixed nav */
+  .input-area {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Scroll-to-bottom button above bottom nav */
+  .scroll-btn {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+  }
+
+  /* Sidebar full height accounting for bottom nav */
+  .sidebar {
+    height: 100dvh;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Overlay above sidebar but below bottom nav context */
+  .sb-overlay {
+    z-index: 29;
+  }
+
+  /* Shell: prevent horizontal scroll */
+  .shell {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Input elements: full width */
+  .input-box {
+    max-width: 100%;
+  }
+
+  .sys-strip {
+    max-width: 100%;
+  }
+
+  .fmt-bar {
+    max-width: 100%;
+  }
+
+  /* Code blocks: horizontal scroll only */
+  .code-block {
+    max-width: calc(100vw - 24px);
+  }
+
+  .code-block > div {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Tables: horizontal scroll */
+  .bubble table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* KaTeX math: horizontal scroll */
+  .katex-display {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Recents page: extra bottom padding */
+  .claude-recents-container {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Follow-up chips: wrap */
+  .followup-row {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  /* Source cards: wrap */
+  .source-cards-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+/* Landscape mobile tweaks */
+@media (max-width: 768px) and (orientation: landscape) {
+  .mobile-bottom-nav {
+    height: 48px;
+  }
+
+  .input-area {
+    padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mbn-btn span {
+    display: none;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .mbn-btn span {
+    display: none;
+  }
+
+  .mobile-bottom-nav {
+    height: 54px;
+  }
+
+  .input-area {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Touch device improvements */
+@media (hover: none) and (pointer: coarse) {
+  .mbn-btn {
+    min-height: 52px;
+  }
+
+  .icon-btn {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+
+  .act-btns button {
+    min-width: 34px !important;
+    min-height: 34px !important;
+    padding: 6px !important;
+  }
+
+  .send-btn {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .msg-actions {
+    opacity: 1 !important;
+  }
+
+  .sug:hover {
+    transform: none !important;
+  }
+
+  .mbn-btn,
+  .icon-btn,
+  .send-btn,
+  .new-btn,
+  .hist-item {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* ==========================================================================
    CLAUDE-STYLE RECENTS/CHATS DASHBOARD
    ========================================================================== */

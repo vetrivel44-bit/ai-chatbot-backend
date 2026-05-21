@@ -3168,6 +3168,55 @@ export default function App() {
         </div>
       </aside>
 
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="mobile-bottom-nav">
+        <button
+          className="mbn-btn"
+          onClick={() => { newChat(); setIsSidebarOpen(false); }}
+          title="New Chat"
+        >
+          <PlusIcon />
+          <span>New</span>
+        </button>
+        <button
+          className={`mbn-btn${isSidebarOpen ? " active" : ""}`}
+          onClick={() => setIsSidebarOpen(o => !o)}
+          title="History"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>History</span>
+        </button>
+        <button
+          className="mbn-btn"
+          onClick={() => setShowModelPicker(true)}
+          title="Mode"
+        >
+          <ModelIcon id={selectedMode} size={20} />
+          <span>Mode</span>
+        </button>
+        <button
+          className="mbn-btn"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          title="Theme"
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          <span>Theme</span>
+        </button>
+        <button
+          className="mbn-btn"
+          onClick={() => setShowProfile(true)}
+          title="Profile"
+        >
+          <div className="mbn-avatar">
+            {(userInfo?.name || "U")[0].toUpperCase()}
+          </div>
+          <span>Profile</span>
+        </button>
+      </nav>
+
       {/* CHAT AREA */}
       <main className="chat">
                 {showRecentsPage ? (
