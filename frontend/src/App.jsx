@@ -23,13 +23,12 @@ if (baseApi.startsWith("http") && !baseApi.endsWith("/api")) {
   baseApi = baseApi.replace(/\/+$/, "") + "/api";
 }
 const API = baseApi;
-const SERPER_API_KEY = import.meta.env.VITE_SERPER_API_KEY || "";
+// Web search is handled entirely by the backend (Tavily)
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const VITE_GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
-const TODAY_STR = new Date().toLocaleDateString("en-IN", {
-  weekday: "long", year: "numeric", month: "long", day: "numeric",
-});
+
+
 const swallowError = () => {};
 const makeExportStamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 const MAX_FILE_SIZE_MB = 25;
@@ -274,144 +273,8 @@ const CURRENT_TRIGGERS = [
 ];
 const needsWebSearch = (q) => CURRENT_TRIGGERS.some(rx => rx.test(q));
 
-// ── FIX 2A: DuckDuckGo instant answers (CORS-friendly, free) ──────────────────
-const fetchDDGInstant = async (query) => {
-  try {
-    const res = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
-      { signal: AbortSignal.timeout(4000) }
-    );
-    const d = await res.json();
-    if (d.AbstractText && d.AbstractText.length > 20)
-      return `**Instant Answer (${d.AbstractSource || "DuckDuckGo"})**: ${d.AbstractText}\n${d.AbstractURL ? `Source: ${d.AbstractURL}` : ""}`;
-    if (d.Answer && d.Answer.length > 5)
-      return `**Quick Answer**: ${d.Answer}`;
-    return null;
-  } catch { return null; }
-};
 
-// ── FIX 2B: Fetch real page content via Jina AI reader (CORS-friendly) ───────
-const fetchPageContent = async (url, maxChars = 3000) => {
-  try {
-    const res = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { Accept: "text/plain", "X-Return-Format": "text" },
-      signal: AbortSignal.timeout(6000),
-    });
-    const text = await res.text();
-    // Strip excessive whitespace and return useful portion
-    return text.replace(/\s{3,}/g, "\n\n").trim().slice(0, maxChars) || null;
-  } catch { return null; }
-};
 
-// ── FIX 2C: Improved Serper-based search with page content ───────────────────
-const fetchWebResults = async (query) => {
-  const snippets = [];
-
-  // 1. DDG instant answer for quick facts
-  const ddgHit = await fetchDDGInstant(query);
-  if (ddgHit) snippets.push(ddgHit);
-
-  if (!SERPER_API_KEY) {
-    if (!snippets.length) return null;
-    snippets.unshift(`**Search Date**: ${TODAY_STR} | **Query**: "${query}"`);
-    return snippets.join("\n\n---\n\n");
-  }
-
-  try {
-    const res = await fetch("https://google.serper.dev/search", {
-      method: "POST",
-      headers: { "X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: query, gl: "in", hl: "en", num: 8 }),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`${res.status}`);
-    const data = await res.json();
-
-    // Priority 1 — Answer box (most accurate)
-    if (data.answerBox) {
-      const ab  = data.answerBox;
-      const ans = ab.answer || ab.snippet || (ab.snippetHighlighted || []).join(" ") || "";
-      if (ans) snippets.unshift(`**DIRECT ANSWER**: ${ans}${ab.link ? `\nSource: ${ab.link}` : ""}`);
-    }
-
-    // Priority 2 — Knowledge graph
-    if (data.knowledgeGraph) {
-      const kg = data.knowledgeGraph;
-      let t = `**${kg.title || ""}**${kg.type ? ` (${kg.type})` : ""}`;
-      if (kg.description) t += `\n${kg.description}`;
-      if (kg.attributes) t += "\n" + Object.entries(kg.attributes).slice(0, 5).map(([k, v]) => `• **${k}**: ${v}`).join("\n");
-      snippets.push(t);
-    }
-
-    // Priority 3 — Sports results
-    if (data.sportsResults?.games?.length) {
-      const sr = data.sportsResults;
-      snippets.push(
-        `**${sr.title || "Live Scores"}**:\n` +
-        sr.games.slice(0, 6).map(g =>
-          `• ${g.homeTeam} **${g.homeScore ?? ""}** vs ${g.awayTeam} **${g.awayScore ?? ""}** ${g.status ? `— ${g.status}` : ""} ${g.date ? `(${g.date})` : ""}`
-        ).join("\n")
-      );
-    }
-
-    // Priority 4 — Top stories / news
-    if (data.topStories?.length) {
-      snippets.push(
-        `**Latest News**:\n` +
-        data.topStories.slice(0, 5).map(s =>
-          `• **${s.title}** — ${s.source || ""} ${s.date ? `(${s.date})` : ""}\n  ${s.link || ""}`
-        ).join("\n")
-      );
-    }
-
-    // Priority 5 — Organic results with snippets
-    if (data.organic?.length) {
-      const orgText = data.organic.slice(0, 5).map((r, i) =>
-        `[${i + 1}] **${r.title}**\n${r.snippet || "(no snippet)"}\n${r.link}`
-      ).join("\n\n");
-      snippets.push(`**Web Results for "${query}"**:\n\n${orgText}`);
-
-      // Fetch actual page content from the #1 result for maximum accuracy
-      const topResult = data.organic[0];
-      if (topResult?.link && !topResult.link.includes("youtube.com") && !topResult.link.includes("twitter.com")) {
-        const pageContent = await fetchPageContent(topResult.link);
-        if (pageContent && pageContent.length > 200) {
-          snippets.push(`**Full Content — "${topResult.title}"**:\n${pageContent}`);
-        }
-      }
-    }
-
-    // People also ask
-    if (data.peopleAlsoAsk?.length) {
-      snippets.push(
-        `**Related Questions**:\n` +
-        data.peopleAlsoAsk.slice(0, 3).map(p => `**Q: ${p.question}**\n${p.snippet || ""}`).join("\n\n")
-      );
-    }
-  } catch (err) { console.error("Serper:", err.message); }
-
-  if (!snippets.length) return null;
-  snippets.unshift(`**Search Date**: ${TODAY_STR} | **Query**: "${query}"`);
-  return snippets.join("\n\n---\n\n");
-};
-
-const buildDeepSearchQueries = (query) => [
-  query.trim(),
-  `${query.trim()} latest 2026`,
-  `${query.trim()} statistics data analysis`,
-  `${query.trim()} expert review site:reddit.com OR site:news.ycombinator.com`,
-].filter(Boolean);
-
-const fetchDeepSearchContext = async (query) => {
-  const queries = buildDeepSearchQueries(query);
-  const results = await Promise.allSettled(queries.map(q => fetchWebResults(q)));
-  const chunks  = results.filter(r => r.status === "fulfilled" && r.value).map(r => r.value);
-  if (!chunks.length) return null;
-  return [
-    `🔎 **DeepSearch for**: "${query}" — ${chunks.length}/${queries.length} search packs retrieved`,
-    ...chunks.map((chunk, i) => `### Source Pack ${i + 1}\n${chunk}`),
-  ].join("\n\n");
-};
 
 // ─── IMAGE GENERATION ─────────────────────────────────────────────────────────
 const IMAGE_DETECT = /\b(generate|create|make|draw|paint|design|render|show me)\b.{0,40}\b(image|picture|photo|artwork|illustration|portrait|sketch|logo|wallpaper|icon)\b/i;
@@ -2997,37 +2860,7 @@ export default function App() {
     setMessages(hist); setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-    // ── Frontend web search (Serper/DDG) ──────────────────────────────────────
-    // When web mode, deep search, or autoWebSearch is enabled, fetch context before AI call
-    const shouldRunFrontendSearch = isWebMode || isDeepSearch || autoWebSearchRef.current;
-    if (shouldRunFrontendSearch && !selFile) {
-      setIsWebSearching(true);
-      try {
-        let webCtx = null;
-        if (isDeepSearch) {
-          webCtx = await fetchDeepSearchContext(text);
-        } else {
-          webCtx = await fetchWebResults(text);
-        }
-        if (webCtx) {
-          // Inject search context as a system message before the user message
-          const webSystemMsg = {
-            role: "system",
-            content: `[LIVE WEB SEARCH RESULTS]\n${webCtx}\n[Use these results to answer the user's question accurately and cite sources.]`,
-            _isWebContext: true
-          };
-          const histWithWeb = [...hist];
-          // Insert web context before the last user message
-          histWithWeb.splice(histWithWeb.length - 1, 0, webSystemMsg);
-          setIsWebSearching(false);
-          triggerAI(histWithWeb, selFile);
-          return;
-        }
-      } catch (err) {
-        console.error("Frontend web search failed:", err);
-      }
-      setIsWebSearching(false);
-    }
+    // Web search is handled by the backend (Tavily) — no frontend search needed
 
     triggerAI(hist, selFile);
   };
