@@ -43,5 +43,6 @@ module.exports = {
     twilioAuthToken:     getEnv("TWILIO_AUTH_TOKEN",     ""),
     twilioFromNumber:    getEnv("TWILIO_FROM_NUMBER",    ""),
     bookingNotificationPhones: getEnv("BOOKING_NOTIFICATION_PHONES", "8778508652,9994777865"),
+    tavilyApiKey:        getEnv("TAVILY_API_KEY",         ""),
   },
 };
