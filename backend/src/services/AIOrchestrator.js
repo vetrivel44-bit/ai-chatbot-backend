@@ -699,6 +699,11 @@ Choose the single best-fitting visualization block(s) from the formats below:
       } catch { /* Fall through to raw text if parsing fails */ }
     }
 
+    // Handle SSE comments (e.g. ": OPENROUTER PROCESSING")
+    if (rawText.trim().startsWith(":")) {
+      return null;
+    }
+
     // Handle standard SSE format (data: {...})
     if (rawText.includes("data: ")) {
       const lines = rawText.split("\n");
