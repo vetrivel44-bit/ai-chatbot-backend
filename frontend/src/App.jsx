@@ -931,7 +931,7 @@ function ScratchpadWidget({ onClose }) {
         </div>
         <div className="modal-body">
           {preview ? (
-            <div className="bubble" style={{ background: "var(--bg-hover)", padding: 16, borderRadius: 12, minHeight: 200 }}>
+            <div className="bubble bg-slate-800 md:bg-[var(--bg-hover)] text-slate-200 md:text-[var(--ink)]" style={{ padding: 16, borderRadius: 12, minHeight: 200 }}>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{text || "*Nothing here yet…*"}</ReactMarkdown>
             </div>
           ) : (
@@ -1458,7 +1458,7 @@ function SummaryPanel({ messages, onClose, addToast }) {
         </div>
         <div className="modal-body">
           {loading && <TypingIndicator text="Summarizing…" />}
-          <div className="bubble" style={{ background: "var(--bg-hover)", padding: 16, borderRadius: 12 }}>
+          <div className="bubble bg-slate-800 md:bg-[var(--bg-hover)] text-slate-200 md:text-[var(--ink)]" style={{ padding: 16, borderRadius: 12 }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary || "…"}</ReactMarkdown>
           </div>
           <div className="modal-footer">
@@ -3046,7 +3046,7 @@ export default function App() {
 
   const renderInputBox = () => {
     return (
-      <form className="claude-input-box" onSubmit={sendMessage}>
+      <form className="claude-input-box bg-slate-800 md:bg-[var(--bg-elevated)] border border-slate-700 md:border-[var(--border-str)]" onSubmit={sendMessage}>
         <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileChange} accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.gif,.webp" />
         {filePreview && (
           <div className="file-prev">
@@ -3065,6 +3065,7 @@ export default function App() {
 
         <textarea
           ref={textareaRef}
+          className="placeholder-slate-400 md:placeholder-[var(--ink-4)] text-slate-200 md:text-[var(--ink)]"
           rows="1"
           placeholder={
             isDictating ? t.listening || "Listening..." :
@@ -3132,13 +3133,13 @@ export default function App() {
 
             {/* Send / Stop Button */}
             {isLoading ? (
-              <button type="button" className="claude-send-btn active" onClick={stopGeneration} title="Stop generating" style={{ background: "var(--ink)", color: "var(--bg)" }}>
+              <button type="button" className="claude-send-btn active bg-amber-500 md:bg-[var(--ink)] text-slate-900 md:text-[var(--bg)]" onClick={stopGeneration} title="Stop generating">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
               </button>
             ) : (
               <button 
                 type="submit" 
-                className={`claude-send-btn ${(!input.trim() && !selFile) ? "" : "active"}`} 
+                className={`claude-send-btn ${(!input.trim() && !selFile) ? "bg-slate-700 md:bg-transparent text-slate-500 md:text-[var(--ink-4)]" : "active bg-amber-500 md:bg-[var(--ink)] text-slate-900 md:text-[var(--bg)]"}`} 
                 disabled={!input.trim() && !selFile}
                 title="Send message"
               >
@@ -3153,7 +3154,7 @@ export default function App() {
 
   // ── MAIN UI ────────────────────────────────────────────────────────────────────
   return (
-    <div className="shell">
+    <div className="shell bg-slate-900 md:bg-[var(--bg)] text-slate-200 md:text-inherit">
       <Toast toasts={toasts} />
 
       {showProfile   && <ProfileModal onClose={() => setShowProfile(false)} t={t} langCode={langCode} setLangCode={setLangCode} theme={theme} setTheme={setTheme} userInfo={userInfo} onProfileSaved={setProfileData} />}
@@ -3376,9 +3377,9 @@ export default function App() {
       </aside>
 
       {/* MOBILE BOTTOM NAV */}
-      <nav className="mobile-bottom-nav">
+      <nav className="mobile-bottom-nav bg-slate-900/90 md:bg-[var(--glass-bg)] border-t border-slate-800 md:border-[var(--glass-border)]">
         <button
-          className="mbn-btn"
+          className="mbn-btn text-slate-400 md:text-[var(--ink-4)]"
           onClick={() => { newChat(); setIsSidebarOpen(false); }}
           title="New Chat"
         >
@@ -3386,7 +3387,7 @@ export default function App() {
           <span>New</span>
         </button>
         <button
-          className={`mbn-btn${isSidebarOpen ? " active" : ""}`}
+          className={`mbn-btn ${isSidebarOpen ? "text-amber-400 md:text-[var(--ink)] active" : "text-slate-400 md:text-[var(--ink-4)]"}`}
           onClick={() => setIsSidebarOpen(o => !o)}
           title="History"
         >
@@ -3397,7 +3398,7 @@ export default function App() {
           <span>History</span>
         </button>
         <button
-          className="mbn-btn"
+          className="mbn-btn text-slate-400 md:text-[var(--ink-4)]"
           onClick={() => setShowModelPicker(true)}
           title="Mode"
         >
@@ -3405,7 +3406,7 @@ export default function App() {
           <span>Explore</span>
         </button>
         <button
-          className="mbn-btn"
+          className="mbn-btn text-slate-400 md:text-[var(--ink-4)]"
           onClick={() => setShowProfile(true)}
           title="Profile"
         >
@@ -3459,8 +3460,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            <header className="chat-header">
-          <div className="ch-left">
+            <header className="chat-header bg-slate-900/80 md:bg-[var(--glass-bg)] border-b border-slate-700/50 md:border-[var(--glass-border)] justify-center md:justify-between">
+          <div className="ch-left hidden md:flex">
             <button className="icon-btn mobile-only" onClick={() => setIsSidebarOpen(true)}><MenuIcon /></button>
             <div className={`mode-pill${isWebMode || isDeepSearch ? " web-mode-pill" : isYtMode ? " yt-mode-pill" : ""}`}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -3656,7 +3657,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bubble">
+                    <div className="bubble bg-slate-800 md:bg-transparent text-slate-200 md:text-[var(--ink)]">
                       {msg.file?.preview && <img src={msg.file.preview} alt="" className="att-img" />}
                       {msg.file?.name && !msg.file.preview && (
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg-hover)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 12px", fontSize: "0.8rem", marginBottom: 10, color: "var(--ink-2)" }}>
