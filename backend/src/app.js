@@ -27,6 +27,14 @@ app.use(
     credentials: true,
   })
 );
+// Stripe needs the raw, unparsed body to verify webhook signatures — must be
+// registered before the global express.json() parser below.
+app.post(
+  "/api/billing/webhook",
+  express.raw({ type: "application/json" }),
+  require("./controllers/billingController").webhook
+);
+
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -62,6 +70,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/sessions", chatSessionRoutes);
+app.use("/api/billing", require("./routes/billingRoutes"));
 app.use("/api/maps", mapsRoutes);
 app.use("/api/debug", require("./routes/debugRoutes"));
 app.use("/api/code", require("./routes/codeRoutes"));

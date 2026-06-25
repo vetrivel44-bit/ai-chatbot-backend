@@ -48,6 +48,32 @@ async function searchDDG(query) {
   }
 }
 
+// ── Image search (Tavily only — DDG fallback has no reliable image API) ───────
+async function searchImages(query, limit = 4) {
+  const apiKey = config.tavilyApiKey || process.env.TAVILY_API_KEY;
+  if (!apiKey || !query) return [];
+
+  try {
+    const client = tavily({ apiKey });
+    const res = await Promise.race([
+      client.search(query, {
+        searchDepth: "basic",
+        maxResults: 1,
+        includeImages: true,
+        includeImageDescriptions: true,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Tavily image search timeout")), 8000)),
+    ]);
+
+    return (res?.images || [])
+      .slice(0, limit)
+      .map((img) => ({ url: img.url, caption: img.description || query }));
+  } catch (err) {
+    logger.warn("Tavily image search failed", { error: err.message });
+    return [];
+  }
+}
+
 async function searchWeb(query) {
   if (!query) throw new Error("Query is required");
 
@@ -116,4 +142,4 @@ async function performSearch(req, res) {
   }
 }
 
-module.exports = { performSearch, searchWeb };
+module.exports = { performSearch, searchWeb, searchImages };

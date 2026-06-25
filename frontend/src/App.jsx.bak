@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, useId } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -7,14 +7,42 @@ import "katex/dist/katex.min.css";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./App.css";
-import { Paperclip, X, CornerDownRight, ArrowDown, Zap, Globe, Play, Calendar, Paintbrush, Brain, Calculator, Target, Coffee, Leaf, Bot, GraduationCap, Terminal, Star, Smile, Pause, RotateCcw, Check, Timer, User, Flame, Rocket, Palette, Moon, Sun, Compass, Anchor, Crown, Gem, Shield, Heart, Key, Lock, ThumbsUp, Frown, Search, FileText, PenLine, Code, Lightbulb, Download, MessageSquare, FolderClosed, LayoutGrid, SlidersHorizontal, FlaskConical, Ghost, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Trash2, LogOut, Settings, HelpCircle, Plus, ExternalLink, Smartphone, Tablet, Monitor, Layers } from "lucide-react";
-import StructuredResponseRenderer from "./components/structured/StructuredResponseRenderer";
-
-const STRUCT_TYPE_RE = /"type"\s*:\s*"(location|route|chart|timeline|comparison_table|comparison|metrics|architecture|gallery|visual_gallery|collapsible|editor|results|onboarding|mcq)"/;
-const hasStructuredContent = (text) => !!text && STRUCT_TYPE_RE.test(text);
-import ThinkingIndicator from "./components/ThinkingIndicator";
 import GlobalSearch from "./components/screens/GlobalSearch";
+import ComputerUI from "./components/screens/ComputerUI";
+import SpacesHub from "./components/screens/SpacesHub";
+import ArtifactsGallery from "./components/screens/ArtifactsGallery";
 import UpgradeModal from "./components/screens/UpgradeModal";
+
+
+const FEATURE_PROMPTS = {
+  1: "Explain Search Mode in Perplexity. How does it work, when should I use it, what are its advantages over Google Search, how does source citation work, and give 10 practical examples.",
+  2: "Explain Perplexity Computer Mode in detail. What tasks can it perform on a computer, how does it interact with websites, what are its limitations, what permissions does it need, and show 20 real-world use cases.",
+  3: "Explain every AI model available in Perplexity. Compare GPT, Claude, Gemini, Sonar and other models. Tell me which model is best for coding, reasoning, research, writing, mathematics, business analysis, and deep research.",
+  4: "Explain Perplexity Voice Input. How accurate is it, what languages are supported, how can I use it for productivity, and what are the best voice prompting techniques?",
+  5: "Explain the Discover section in Perplexity. How are articles selected, how often is content updated, can recommendations be personalized, and how can I use Discover for learning and research?",
+  6: "Explain the Finance section in Perplexity. What financial data is available, how are stock analyses generated, what investment research tools exist, and how reliable is the information?",
+  7: "Explain the Health section in Perplexity. What medical information sources are used, how are responses verified, what limitations exist, and how should users interpret health-related answers?",
+  8: "Explain the Academic section in Perplexity. How does it search research papers, what databases are used, how are citations generated, and how can students use it for assignments and literature reviews?",
+  9: "Explain the Patents section in Perplexity. How does patent search work, what patent databases are searched, how can inventors use it, and what are the best prompts for patent research?",
+  10: "Explain Connect Your Apps in Perplexity. Which apps are supported, what permissions are required, how is privacy handled, and give examples of workflows using Gmail, Google Drive, Notion, Slack, and GitHub.",
+  11: "Explain the Triage My Email Inbox feature. How does it analyze emails, categorize messages, prioritize tasks, suggest replies, and protect user privacy?",
+  12: "Explain Deep Research in Perplexity. How does it differ from normal search, what research methodology is used, how many sources are analyzed, and when should I use it instead of regular Search?",
+  13: "Explain the Build a Chief of Staff feature. How can it help manage projects, meetings, tasks, emails, calendars, and strategic planning? Show practical examples.",
+  14: "Explain the Trip Planning feature. How does it generate itineraries, estimate costs, suggest hotels, optimize routes, and adapt plans based on budget and interests?",
+  15: "Explain the Daily News Digest feature. How are news sources selected, how can topics be customized, how often are updates sent, and how does it avoid misinformation?",
+  16: "Explain the purpose of the + button in Perplexity. What types of new threads, projects, spaces, or workflows can be created, and how should users organize them?",
+  17: "Explain how Perplexity stores chats, collections, projects, and conversation history. How can users organize, search, export, and manage their knowledge base?",
+  18: "Explain Perplexity Spaces in detail. How do Spaces work, how can teams collaborate, what files can be uploaded, and what are the best use cases for students, researchers, and businesses?",
+  19: "Explain every setting available in Perplexity. Include account settings, privacy options, AI model settings, personalization options, integrations, notifications, and security controls.",
+  20: "Act as a Perplexity product expert. Explain every feature currently available in Perplexity, including Search, Deep Research, Computer Mode, Spaces, Discover, Finance, Health, Academic, Patents, Connect Apps, Email Triage, Chief of Staff, Trip Planner, News Digest, Models, Voice Input, Settings, and all sidebar tools. For each feature explain: purpose, capabilities, limitations, pricing, best use cases, advanced tips, and example workflows. Use a detailed structured guide suitable for a power user."
+};
+
+import { Paperclip, X, CornerDownRight, ArrowDown, Zap, Globe, Play, Calendar, Paintbrush, Brain, Calculator, Target, Coffee, Leaf, Bot, GraduationCap, Terminal, Star, Smile, Pause, RotateCcw, Check, Timer, User, Flame, Rocket, Palette, Moon, Sun, Compass, Anchor, Crown, Gem, Shield, Heart, Key, Lock, ThumbsUp, Frown, Search, FileText } from "lucide-react";
+import StreamingResponse from "./components/structured/StreamingResponse";
+import StructuredResponseRenderer from "./components/structured/StructuredResponseRenderer";
+import DataChart from "./components/structured/DataChart";
+import LocationMap from "./components/structured/LocationMap";
+import ThinkingIndicator from "./components/ThinkingIndicator";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 let baseApi = "/api";
@@ -34,52 +62,6 @@ const VITE_GROQ_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 const swallowError = () => {};
 const makeExportStamp = () => new Date().toISOString().replace(/[:.]/g, "-");
 const MAX_FILE_SIZE_MB = 25;
-
-// Shared SSE reader for the chat stream — used by the main chat flow and by
-// standalone panels (e.g. DesignCanvas) that talk to /api/chat independently.
-const readSSEStream = async (reader, onChunk, onStatus, onError, isActive, reqId) => {
-  const dec = new TextDecoder();
-  let lineBuffer = "";
-  let accumulated = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!isActive()) return accumulated;
-
-      lineBuffer += dec.decode(value, { stream: true });
-      const lines = lineBuffer.split("\n");
-      lineBuffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice(6).trim();
-        if (!raw || raw === "[DONE]") continue;
-
-        try {
-          const { type, data } = JSON.parse(raw);
-          if (type === "content" && data) {
-             accumulated += data;
-             onChunk(accumulated);
-          } else if (type === "clear") {
-             accumulated = "";
-             onChunk("");
-          } else if (type === "status" && data) {
-             onStatus(data);
-          } else if (type === "error" && data) {
-             onError(data);
-          }
-        } catch (err) {
-          console.error("SSE parse error:", err, raw);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("SSE read error:", err);
-    throw err;
-  }
-  return accumulated;
-};
 
 // ─── DIRECT BROWSER AI (Pollinations.ai — Emergency fallback only) ──────────
 // Only used if the backend server is completely unreachable (network down).
@@ -120,58 +102,16 @@ const extractSourceUrls = (text) => {
   });
 };
 
-// ─── VETROAI BRAND LOGO ────────────────────────────────────────────────────────
-// Uses the actual logo.png (723×240, tightly cropped, transparent background).
-// CSS filter boosts the pastel colors to premium Electric Blue / Indigo / Purple.
-const VetroLogo = ({ width = 150, className = "" }) => (
+// ─── CLAUDE-STYLE VETROAI LOGO (Serif Spark) ──────────────────────────────────
+const VetroSpark = ({ size = 24, color = "currentColor", className = "" }) => (
   <img
     src="/logo.png"
-    alt="VetroAi"
-    className={`vetro-brand-logo ${className}`}
-    style={{ width, height: 'auto', display: 'block', flexShrink: 0 }}
+    alt="VetroAI Logo"
+    width={size}
+    height={size}
+    className={`vetroai-logo ${className}`}
+    style={{ borderRadius: '24%', objectFit: 'contain', display: 'inline-block', verticalAlign: 'middle' }}
   />
-);
-
-// Icon-only: shows just the V portion (left ~40% of the 3:1 logo)
-const VetroSpark = ({ size = 32, className = "" }) => (
-  <div
-    className={className}
-    style={{ width: size, height: size, overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center' }}
-  >
-    <img
-      src="/logo.png"
-      alt="VetroAi"
-      className="vetro-brand-logo"
-      style={{ height: size, width: 'auto', maxWidth: 'none', display: 'block' }}
-    />
-  </div>
-);
-
-// White-on-dark version for the gradient circle avatar
-const VetroSparkWhite = ({ size = 22 }) => (
-  <svg width={size} height={size} viewBox="0 0 68 76" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <line x1="38" y1="6"  x2="5"  y2="24" stroke="white" strokeWidth="3.5" strokeLinecap="round"/>
-    <line x1="38" y1="6"  x2="62" y2="18" stroke="white" strokeWidth="3.5" strokeLinecap="round"/>
-    <line x1="5"  y1="24" x2="18" y2="48" stroke="white" strokeWidth="3.5" strokeLinecap="round"/>
-    <line x1="18" y1="48" x2="36" y2="70" stroke="white" strokeWidth="3.5" strokeLinecap="round"/>
-    <line x1="62" y1="18" x2="36" y2="70" stroke="white" strokeWidth="3.5" strokeLinecap="round"/>
-    <line x1="18" y1="48" x2="38" y2="6"  stroke="white" strokeWidth="2"   strokeLinecap="round" opacity="0.7"/>
-    <circle cx="38" cy="6"  r="6.5" fill="white"/>
-    <circle cx="5"  cy="24" r="5"   fill="white"/>
-    <circle cx="62" cy="18" r="4.5" fill="white"/>
-    <circle cx="18" cy="48" r="4.5" fill="white"/>
-    <circle cx="36" cy="70" r="5"   fill="white"/>
-  </svg>
-);
-
-// Sunburst / asterisk mark used for brand + greeting accents
-const SunburstIcon = ({ size = 24, color = "currentColor", className = "" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} className={className} style={{ flexShrink: 0 }}>
-    <rect x="10.8" y="1.5" width="2.4" height="21" rx="1.2" />
-    <rect x="10.8" y="1.5" width="2.4" height="21" rx="1.2" transform="rotate(45 12 12)" />
-    <rect x="10.8" y="1.5" width="2.4" height="21" rx="1.2" transform="rotate(90 12 12)" />
-    <rect x="10.8" y="1.5" width="2.4" height="21" rx="1.2" transform="rotate(135 12 12)" />
-  </svg>
 );
 
 // ─── CUSTOM AI PERSONAS ────────────────────────────────────────────────────────
@@ -532,6 +472,30 @@ const ModelIcon = ({ id, size = 16 }) => {
 // Keep MODES alias for any legacy references
 const MODES = MODES_LIST.map(m => ({ id: m.id, name: m.name }));
 
+const TOP_TABS = [
+  { id: "Discover", label: "Discover", mode: "normal" },
+  { id: "Finance", label: "Finance", mode: "analyst" },
+  { id: "Health", label: "Health", mode: "summarize" },
+  { id: "Academic", label: "Academic", mode: "deep_search" },
+  { id: "Patents", label: "Patents", mode: "normal" },
+];
+
+const QUICK_ACTIONS = [
+  { id: "connect_apps", title: "Connect your apps", subtitle: "Link Gmail, Calendar, Slack, GitHub and Notion.", type: "connect" },
+  { id: "triage_email", title: "Triage my email inbox", subtitle: "Summarize unread email and prioritize actions.", prompt: "Triage my email inbox and summarize unread messages into categories: Urgent, Action Needed, Newsletter, Spam." },
+  { id: "deep_research", title: "Run deep research", subtitle: "Activate multi-step research and long-form synthesis.", prompt: "Run deep research on this topic with citations, sources, and a structured summary." },
+  { id: "market_scanning", title: "Market scanning tool", subtitle: "Analyze live stock and crypto news with price signals.", prompt: "Scan the current market for top stock and crypto opportunities with recent news and key takeaways." },
+  { id: "academic_collection", title: "Academic collection", subtitle: "Search arXiv, PubMed and Semantic Scholar.", prompt: "Perform an academic search with formatted citations and save sources to the library." },
+  { id: "build_react_ui", title: "Build a React UI", subtitle: "Open Canvas/Labs mode with live preview.", prompt: "Build a React UI component with a live preview and code explanation." },
+];
+
+const HOME_HERO_CARDS = [
+  { id: "search_anything", title: "Search anything", subtitle: "Get fast and accurate answers from the most trusted sources." },
+  { id: "computer_work", title: "Get work done with Computer", subtitle: "Hand off your projects to get polished, reliable deliverables around the clock.", label: "NEW" },
+];
+
+const ORCHESTRATOR_OPTIONS = ["Orchestrator", "GPT-4", "Claude", "Gemini"];
+const INPUT_MODE_OPTIONS = ["Search", "Research", "Labs"];
 
 const AVATARS = ["User", "Bot", "Zap", "Brain", "Globe", "Star", "Flame", "Rocket", "Palette", "Moon", "Sun", "Target", "Compass", "Anchor", "Crown", "Gem", "Shield", "Heart", "Key", "Lock"];
 
@@ -625,103 +589,18 @@ const ThumbsUpIcon = () => <Ic size={14} d={<><path d="M14 9V5a3 3 0 0 0-3-3l-4 
 const ThumbsDnIcon = () => <Ic size={14} d={<><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" /><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" /></>} />;
 
 // ─── CODE BLOCK ───────────────────────────────────────────────────────────────
-// ─── WRITING BLOCK DETECTION ──────────────────────────────────────────────────
-function isWritingBlock(text) {
-  if (!text || text.length < 200) return false;
-  return (
-    /^(subject:|dear\s|to whom|re:\s)/im.test(text) ||
-    /\n(sincerely,?|regards,?|yours truly,?|best regards,?|thank you,?)\s*\n?$/im.test(text)
-  );
-}
-function getWritingTitle(text) {
-  const subj = text.match(/\*?\*?subject:\*?\*?\s*(.+)/i);
-  if (subj) return subj[1].replace(/[*_]/g, '').trim();
-  const re = text.match(/re:\s*(.+)/i);
-  if (re) return re[1].replace(/[*_]/g, '').trim();
-  const line = text.split('\n').find(l => l.trim().length > 3 && !/^(from:|to:|date:|cc:|dear)/i.test(l.trim()));
-  return (line || 'Document').replace(/[*_#]/g, '').trim().slice(0, 60);
-}
-
-function WritingBlockCard({ content }) {
-  const [expanded, setExpanded] = useState(true);
-  const [editing, setEditing]   = useState(false);
-  const [draft, setDraft]       = useState(content);
-  const [copied, setCopied]     = useState(false);
-  const title = getWritingTitle(content);
-  const doCopy = () => { navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const doDownload = () => {
-    const blob = new Blob([draft], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = title.slice(0, 40).replace(/\s+/g, '_').replace(/[^\w_]/g, '') + '.txt';
-    a.click();
-  };
-  const doShare = () => navigator.share ? navigator.share({ title, text: draft }).catch(() => {}) : navigator.clipboard.writeText(draft);
-  return (
-    <div className="writing-block">
-      <div className="writing-block-header">
-        <div className="writing-block-title"><FileText size={14} /><span>{title}</span></div>
-        <div className="writing-block-acts">
-          {!editing && <button className="wb-btn" onClick={() => setEditing(true)} title="Edit" aria-label="Edit"><EditIcon /></button>}
-          <button className="wb-btn" onClick={doCopy} title="Copy" aria-label="Copy">{copied ? <CheckIcon /> : <CopyIcon />}</button>
-          <button className="wb-btn" onClick={doDownload} title="Download" aria-label="Download"><DlIcon /></button>
-          <button className="wb-btn" onClick={doShare} title="Share" aria-label="Share"><ShareIcon /></button>
-          <button className="wb-btn" onClick={() => setExpanded(v => !v)} title={expanded ? 'Collapse' : 'Expand'} aria-label={expanded ? 'Collapse' : 'Expand'}>
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-        </div>
-      </div>
-      {expanded && (editing ? (
-        <div>
-          <textarea
-            className="writing-edit-textarea"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); setEditing(false); } if (e.key === 'Escape') { setDraft(content); setEditing(false); } }}
-            autoFocus
-          />
-          <div className="writing-edit-footer">
-            <button className="ai-edit-btn-save" onClick={() => setEditing(false)}>Save</button>
-            <button className="ai-edit-btn-cancel" onClick={() => { setDraft(content); setEditing(false); }}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <div className="writing-block-content claude-prose">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft}</ReactMarkdown>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── CODE BLOCK ───────────────────────────────────────────────────────────────
-function CodeBlock({ match, codeString, copyLabel, onSaveArtifact }) {
+function CodeBlock({ match, codeString, copyLabel }) {
   const [cp, setCp] = useState(false);
-  const lang = match ? match[1] : 'text';
   const copy = () => { navigator.clipboard.writeText(codeString); setCp(true); setTimeout(() => setCp(false), 2000); };
-  const download = () => {
-    const extMap = { javascript:'js', typescript:'ts', python:'py', java:'java', 'c++':'cpp', html:'html', css:'css', sql:'sql' };
-    const ext = extMap[lang] ?? lang ?? 'txt';
-    const blob = new Blob([codeString], { type: 'text/plain' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `code.${ext}`; a.click();
-  };
   return (
     <div className="code-wrap">
       <div className="code-header">
-        <span className="code-lang">{lang}</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {onSaveArtifact && (
-            <button className="code-copy-btn" onClick={onSaveArtifact} title="Open as artifact" aria-label="Open as artifact">
-              <LayoutGrid size={12} />&nbsp;Artifact
-            </button>
-          )}
-          <button className="code-copy-btn" onClick={download} title="Download file" aria-label="Download"><DlIcon />&nbsp;Download</button>
-          <button className="code-copy-btn" onClick={copy} aria-label="Copy code">
-            {cp ? <><CheckIcon /> Copied</> : <><CopyIcon /> {copyLabel || "Copy"}</>}
-          </button>
-        </div>
+        <span className="code-lang">{match ? match[1] : "text"}</span>
+        <button className="code-copy-btn" onClick={copy}>
+          {cp ? <><CheckIcon /> Copied</> : <><CopyIcon /> {copyLabel || "Copy"}</>}
+        </button>
       </div>
-      <SyntaxHighlighter style={vscDarkPlus} language={lang} PreTag="div"
+      <SyntaxHighlighter style={vscDarkPlus} language={match ? match[1] : "text"} PreTag="div"
         customStyle={{ margin: 0, padding: "16px 20px", background: "transparent", fontSize: "0.82rem" }}>
         {codeString}
       </SyntaxHighlighter>
@@ -1166,6 +1045,7 @@ function CodePlayground({ onClose }) {
   const [stdin, setStdin]       = useState("");
   const [rightTab, setRightTab] = useState("output"); // "output" | "stdin"
   const textRef = useRef(null);
+  
 
   const currentLang = PLAYGROUND_LANGS.find(l => l.id === langId) || PLAYGROUND_LANGS[0];
 
@@ -1438,46 +1318,24 @@ const ChartIcon = () => <Ic size={14} d={<><line x1="18" y1="20" x2="18" y2="10"
 
 
 // ─── ARTIFACTS / CANVAS PANEL (Claude-style) ──────────────────────────────────
-const ARTIFACT_EXT = { javascript: "js", js: "js", typescript: "ts", python: "py", html: "html", css: "css", json: "json", markdown: "md", jsx: "jsx", tsx: "tsx", sql: "sql" };
-
-function ArtifactsPanel({ artifact, onClose }) {
-  const { code, language, title } = artifact;
-  const [tab, setTab] = useState(language === "html" ? "preview" : "code");
+function ArtifactsPanel({ code, language, onClose }) {
+  const [tab, setTab] = useState("code");
   const [copied, setCopied] = useState(false);
-  const previewable = language === "html" || language === "javascript" || language === "js" || language === "svg";
+  const [output, setOutput] = useState("");
   const copy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const download = () => {
-    const ext = ARTIFACT_EXT[language] || "txt";
-    const blob = new Blob([code], { type: "text/plain" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${(title || "artifact").replace(/[^\w.-]+/g, "_")}.${ext}`; a.click();
-  };
-  const openInNewTab = () => {
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(code); w.document.close(); }
-  };
+  const run  = () => setOutput(code);
   return (
     <div className="artifacts-panel">
       <div className="artifacts-header">
         <div className="artifacts-tabs">
-          <span className="artifact-title" title={title}>{title || "Artifact"}</span>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button className="atab" onClick={onClose}>✕</button>
-        </div>
-      </div>
-      <div className="artifacts-subbar">
-        <div className="artifacts-tabs">
           <button className={`atab${tab === "code" ? " active" : ""}`} onClick={() => setTab("code")}>📄 Code</button>
-          {previewable && (
-            <button className={`atab${tab === "preview" ? " active" : ""}`} onClick={() => setTab("preview")}>▶ Preview</button>
+          {(language === "html" || language === "javascript" || language === "js") && (
+            <button className={`atab${tab === "preview" ? " active" : ""}`} onClick={() => { setTab("preview"); run(); }}>▶ Preview</button>
           )}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {tab === "preview" && (
-            <button className="atab" onClick={openInNewTab} title="Open in new tab"><ExternalLink size={13} /></button>
-          )}
-          <button className="atab" onClick={download} title="Download"><Download size={13} /></button>
           <button className="atab" onClick={copy} style={{ color: copied ? "var(--success)" : undefined }}>{copied ? "✓ Copied" : "Copy"}</button>
+          <button className="atab" onClick={onClose}>✕</button>
         </div>
       </div>
       {tab === "code" && (
@@ -1486,211 +1344,8 @@ function ArtifactsPanel({ artifact, onClose }) {
         </SyntaxHighlighter>
       )}
       {tab === "preview" && (
-        <iframe title="artifact-preview" srcDoc={code} sandbox="allow-scripts allow-same-origin" style={{ flex: 1, border: "none", background: "#fff", borderRadius: "0 0 12px 12px", minHeight: 400 }} />
+        <iframe title="artifact-preview" srcDoc={output} sandbox="allow-scripts allow-same-origin" style={{ flex: 1, border: "none", background: "#fff", borderRadius: "0 0 12px 12px", minHeight: 400 }} />
       )}
-    </div>
-  );
-}
-
-// ─── ARTIFACTS GALLERY ──────────────────────────────────────────────────────────
-function ArtifactsGallery({ artifacts, onOpen, onClose }) {
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal artifacts-gallery-modal" style={{ width: 680, maxWidth: "92%", maxHeight: "85vh" }}>
-        <div className="modal-topbar">
-          <h3 className="modal-title"><LayoutGrid size={17} /> Artifacts</h3>
-          <button className="modal-x" onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="modal-body" style={{ gap: 14 }}>
-          {artifacts.length === 0 ? (
-            <p style={{ textAlign: "center", color: "var(--ink-4)", fontSize: "0.85rem", padding: "30px 0" }}>
-              Code, documents, and designs the AI generates for you will show up here — ready to reopen, copy, or download.
-            </p>
-          ) : (
-            <div className="artifact-gallery-grid">
-              {artifacts.slice().reverse().map(a => (
-                <button key={a.id} className="artifact-gallery-card" onClick={() => onOpen(a)}>
-                  <div className="artifact-gallery-card-icon"><FileText size={16} /></div>
-                  <span className="artifact-gallery-card-title">{a.title}</span>
-                  <span className="artifact-gallery-card-meta">{a.language} · {new Date(a.createdAt).toLocaleDateString()}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── DESIGN CANVAS ───────────────────────────────────────────────────────────────
-const SMOOTH_SCROLLBAR_CSS = `
-<style>
-  html { scroll-behavior: smooth; }
-  * { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.22) transparent; }
-  *::-webkit-scrollbar { width: 8px; height: 8px; }
-  *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.22); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
-  *::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.38); }
-</style>`;
-
-function injectSmoothScrollbar(html) {
-  if (!html) return html;
-  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${SMOOTH_SCROLLBAR_CSS}</head>`);
-  return SMOOTH_SCROLLBAR_CSS + html;
-}
-
-function parseDesignResponse(text) {
-  // Closed fence, with or without a language tag: ```html ... ``` or ``` ... ```
-  let m = text.match(/```(?:html)?\s*\n?([\s\S]*?)```/i);
-  if (m && /<(!doctype|html|head|body|div|style)\b/i.test(m[1])) {
-    return { caption: text.slice(0, m.index).trim(), html: injectSmoothScrollbar(m[1].trim()) };
-  }
-
-  // Unclosed fence — streaming mid-response, or the model never emitted a closing ```
-  m = text.match(/```(?:html)?\s*\n?([\s\S]*)/i);
-  if (m && /<(!doctype|html|head|body)\b/i.test(m[1])) {
-    return { caption: text.slice(0, m.index).trim(), html: injectSmoothScrollbar(m[1].trim()) };
-  }
-
-  // No fences at all — model returned raw HTML directly
-  const rawStart = text.search(/<(!doctype html|html)\b/i);
-  if (rawStart !== -1) {
-    return { caption: text.slice(0, rawStart).trim(), html: injectSmoothScrollbar(text.slice(rawStart).trim()) };
-  }
-
-  return { caption: text.trim(), html: "" };
-}
-
-function DesignCanvas({ onClose }) {
-  const [messages, setMessages] = useState(() => { try { return JSON.parse(localStorage.getItem("vetroai_design_history") || "[]"); } catch { return []; } });
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [tab, setTab] = useState("preview");
-  const [viewport, setViewport] = useState("desktop");
-  const [copied, setCopied] = useState(false);
-  const abortRef = useRef(null);
-
-  useEffect(() => {
-    try { localStorage.setItem("vetroai_design_history", JSON.stringify(messages.slice(-20))); } catch {}
-  }, [messages]);
-
-  const lastDesign = useMemo(() => {
-    const lastAssistant = [...messages].reverse().find(m => m.role === "assistant" && m.content);
-    return lastAssistant ? parseDesignResponse(lastAssistant.content) : { caption: "", html: "" };
-  }, [messages]);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-    const hist = [...messages, { role: "user", content: text }, { role: "assistant", content: "" }];
-    setMessages(hist);
-    setInput("");
-    setIsLoading(true);
-    setTab("preview");
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    const isActive = () => abortRef.current === ctrl;
-    try {
-      const fd = new FormData();
-      fd.append("input", text);
-      fd.append("messages", JSON.stringify(hist.slice(0, -1).slice(-8)));
-      fd.append("mode", "design");
-      fd.append("temperature", "0.7");
-      fd.append("maxTokens", "6000");
-      fd.append("reqId", `design_${Date.now()}`);
-      fd.append("webSearch", "false");
-      const res = await fetch(API + "/chat", { method: "POST", body: fd, signal: ctrl.signal });
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      await readSSEStream(
-        res.body.getReader(),
-        (acc) => { if (isActive()) setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: acc }; return u; }); },
-        () => {},
-        (errMsg) => { if (isActive()) setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: `⚠️ ${errMsg}` }; return u; }); },
-        isActive,
-        `design_${Date.now()}`
-      );
-    } catch (err) {
-      if (err.name !== "AbortError" && isActive()) {
-        setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: `⚠️ ${err.message || "Something went wrong."}` }; return u; });
-      }
-    } finally {
-      if (isActive()) setIsLoading(false);
-    }
-  };
-
-  const copy = () => { navigator.clipboard.writeText(lastDesign.html); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const download = () => {
-    const blob = new Blob([lastDesign.html], { type: "text/html" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "design.html"; a.click();
-  };
-  const openInNewTab = () => { const w = window.open("", "_blank"); if (w) { w.document.write(lastDesign.html); w.document.close(); } };
-  const clearChat = () => {
-    if (messages.length && !window.confirm("Clear this design conversation?")) return;
-    setMessages([]);
-    try { localStorage.removeItem("vetroai_design_history"); } catch {}
-  };
-
-  return (
-    <div className="design-canvas-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="design-canvas" onClick={e => e.stopPropagation()}>
-        <div className="design-canvas-header">
-          <h3 className="modal-title"><Palette size={16} /> Design <FlaskConical size={12} style={{ color: "var(--ink-4)" }} /></h3>
-          {lastDesign.html && (
-            <div className="design-viewport-toggle">
-              <button className={viewport === "mobile" ? "active" : ""} onClick={() => setViewport("mobile")} title="Mobile"><Smartphone size={14} /></button>
-              <button className={viewport === "tablet" ? "active" : ""} onClick={() => setViewport("tablet")} title="Tablet"><Tablet size={14} /></button>
-              <button className={viewport === "desktop" ? "active" : ""} onClick={() => setViewport("desktop")} title="Desktop"><Monitor size={14} /></button>
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 6 }}>
-            {lastDesign.html && (
-              <>
-                <button className="atab" onClick={() => setTab(tab === "code" ? "preview" : "code")}>{tab === "code" ? "▶ Preview" : "📄 Code"}</button>
-                <button className="atab" onClick={openInNewTab} title="Open in new tab"><ExternalLink size={13} /></button>
-                <button className="atab" onClick={download} title="Download"><Download size={13} /></button>
-                <button className="atab" onClick={copy} style={{ color: copied ? "var(--success)" : undefined }}>{copied ? "✓ Copied" : "Copy"}</button>
-              </>
-            )}
-            {messages.length > 0 && (
-              <button className="atab" onClick={clearChat} title="Clear chat"><Trash2 size={13} /></button>
-            )}
-            <button className="modal-x" onClick={onClose}><X size={18} /></button>
-          </div>
-        </div>
-        <div className="design-canvas-body">
-          <div className="design-canvas-stage">
-            {!lastDesign.html ? (
-              <div className="design-canvas-empty">
-                <Palette size={28} />
-                <p>{isLoading ? "Designing…" : "Describe a UI below and I'll design it live."}</p>
-              </div>
-            ) : tab === "code" ? (
-              <SyntaxHighlighter style={vscDarkPlus} language="html" customStyle={{ margin: 0, flex: 1, fontSize: "0.82rem", height: "100%" }}>
-                {lastDesign.html}
-              </SyntaxHighlighter>
-            ) : (
-              <div className={`design-frame-wrap viewport-${viewport}`}>
-                <iframe title="design-preview" srcDoc={lastDesign.html} sandbox="allow-scripts" className="design-frame" />
-              </div>
-            )}
-          </div>
-          <div className="design-canvas-chat">
-            <div className="design-canvas-chat-msgs">
-              {messages.length === 0 && <p style={{ color: "var(--ink-4)", fontSize: "0.8rem" }}>e.g. "A pricing page with 3 tiers" or "Make the buttons rounded and purple"</p>}
-              {messages.map((m, i) => (
-                <div key={i} className={`design-msg design-msg-${m.role}`}>
-                  {m.role === "user" ? m.content : (m.content ? (parseDesignResponse(m.content).caption || "Updated the design ↑") : (isLoading && i === messages.length - 1 ? "Designing…" : ""))}
-                </div>
-              ))}
-            </div>
-            <form className="design-input-row" onSubmit={e => { e.preventDefault(); send(); }}>
-              <input value={input} onChange={e => setInput(e.target.value)} placeholder="Describe the UI you want…" disabled={isLoading} />
-              <button type="submit" disabled={isLoading || !input.trim()}>Send</button>
-            </form>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1911,7 +1566,7 @@ function SpaceModal({ space, onSave, onClose, onDelete }) {
           <h3 className="modal-title">{space ? "Edit Space" : "New Space"}</h3>
           <button className="modal-x" onClick={onClose}><X size={18} /></button>
         </div>
-        <div className="modal-body" style={{ padding: 20, gap: 16, flexShrink: 1, minHeight: 0 }}>
+        <div className="modal-content" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", gap: 16 }}>
             <div style={{ flex: 1 }}>
               <label className="provider-label">Name</label>
@@ -1956,7 +1611,7 @@ function SpaceModal({ space, onSave, onClose, onDelete }) {
             </div>
           </div>
         </div>
-        <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between", flexShrink: 0, padding: "12px 20px" }}>
+        <div className="modal-footer" style={{ display: "flex", justifyContent: "space-between" }}>
           {space ? <button className="btn-ghost" onClick={() => onDelete(space.id)} style={{ color: "#ef4444" }}>Delete Space</button> : <div></div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn-ghost" onClick={onClose}>Cancel</button>
@@ -1971,57 +1626,9 @@ function SpaceModal({ space, onSave, onClose, onDelete }) {
   );
 }
 
-// ─── SPACES PANEL (Claude-style "Projects") ─────────────────────────────────────
-function SpacesPanel({ spaces, currentSpaceId, onOpenSpace, onNewSpace, onEditSpace, onDeleteSpace, onClose }) {
-  return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal spaces-modal" style={{ width: 640, maxWidth: "92%", maxHeight: "85vh" }}>
-        <div className="modal-topbar">
-          <h3 className="modal-title"><FolderClosed size={17} /> Projects</h3>
-          <button className="modal-x" onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="modal-body" style={{ gap: 14 }}>
-          <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--ink-3)" }}>
-            Projects keep chats, instructions, and knowledge files together for a specific task.
-          </p>
-          <div className="spaces-grid">
-            <button className="space-card space-card-new" onClick={onNewSpace}>
-              <Plus size={22} />
-              <span>New project</span>
-            </button>
-            {spaces.map(sp => {
-              const Icon = (SPACE_ICONS.find(i => i.id === sp.icon) || SPACE_ICONS[0]).icon;
-              const isActive = sp.id === currentSpaceId;
-              return (
-                <div key={sp.id} className={`space-card${isActive ? " space-card-active" : ""}`} onClick={() => onOpenSpace(sp.id)}>
-                  <div className="space-card-icon" style={{ background: `${sp.color || SPACE_COLORS[0]}22`, color: sp.color || SPACE_COLORS[0] }}>
-                    <Icon size={18} />
-                  </div>
-                  <div className="space-card-body">
-                    <span className="space-card-name">{sp.name}</span>
-                    <span className="space-card-meta">{sp.files?.length ? `${sp.files.length} file${sp.files.length === 1 ? "" : "s"}` : "No knowledge files"}</span>
-                  </div>
-                  <div className="space-card-actions">
-                    <button onClick={(e) => { e.stopPropagation(); onEditSpace(sp); }} title="Edit project" aria-label="Edit project"><Pencil size={13} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); onDeleteSpace(sp.id); }} title="Delete project" aria-label="Delete project" style={{ color: "#ef4444" }}><Trash2 size={13} /></button>
-                  </div>
-                  {isActive && <span className="space-card-badge">Active</span>}
-                </div>
-              );
-            })}
-          </div>
-          {spaces.length === 0 && (
-            <p style={{ textAlign: "center", color: "var(--ink-4)", fontSize: "0.82rem", padding: "8px 0" }}>No projects yet — create one to keep related chats and files together.</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── WORKSPACE POPUP ────────────────────────────────────────────────────────────
 
-function WorkspacePopup({ currentMode, currentProvider, onSelectMode, onSelectProvider, onClose, variant }) {
+function WorkspacePopup({ currentMode, currentProvider, onSelectMode, onSelectProvider, onClose }) {
   const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
@@ -2049,7 +1656,7 @@ function WorkspacePopup({ currentMode, currentProvider, onSelectMode, onSelectPr
   return (
     <>
       <div className="overlay" style={{ background: "transparent" }} onClick={handleClose}></div>
-      <div className={`workspace-popup${variant ? ` ${variant}` : ""}${isClosing ? " closing" : ""}`}>
+      <div className={`workspace-popup${isClosing ? " closing" : ""}`}>
         <div className="ws-popup-header">
           <span className="ws-popup-label">Workspace</span>
           <div className="ws-provider-tabs">
@@ -2120,7 +1727,8 @@ function getRelativeTime(id) {
 }
 
 export default function App() {
-  const [theme, setTheme]         = useState(() => localStorage.getItem("vetroai_theme") || "dark");
+  const messagesEndRef = useRef(null);
+  const [theme, setTheme]         = useState(() => localStorage.getItem("vetroai_theme") || "light");
   const [langCode, setLangCode]   = useState(() => localStorage.getItem("vetroai_lang") || "en");
   const t = LANGS[langCode]?.t || LANGS.en.t;
 
@@ -2132,10 +1740,6 @@ export default function App() {
   // ── Auth ─────────────────────────────────────────────────────────────────────
   const [user, setUser]           = useState(localStorage.getItem("token"));
   const [userInfo, setUserInfo]   = useState(() => { try { return JSON.parse(localStorage.getItem("vetroai_userinfo") || "null"); } catch { return null; } });
-  // Stable per-account storage namespace. `user` is the raw auth token, which rotates on
-  // every login/refresh — keying localStorage off it silently orphaned all saved sessions,
-  // spaces, and artifacts behind the old token each time a user re-logged in. Email is stable.
-  const userKey = userInfo?.email || user;
   const [authMode, setAuthMode]   = useState("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -2196,6 +1800,7 @@ export default function App() {
 
   // ── Session ───────────────────────────────────────────────────────────────────
   const [sessions, setSessions]             = useState([]);
+  const [showRecentsPage, setShowRecentsPage] = useState(false);
   const [recentsSearch, setRecentsSearch]   = useState("");
 
   const filteredSessions = React.useMemo(() => {
@@ -2210,15 +1815,14 @@ export default function App() {
   // ── Spaces / Projects ─────────────────────────────────────────────────────────
   const [spaces, setSpaces] = useState([]);
   const [currentSpaceId, setCurrentSpaceId] = useState(null);
+  const [showSpaceModal, setShowSpaceModal] = useState(false);
   const [editingSpace, setEditingSpace] = useState(null);
   // ── Chat ──────────────────────────────────────────────────────────────────────
+  const [savedSessions, setSavedSessions] = useState([]);
   const [messages, setMessages]             = useState([]);
-  const [isIncognito, setIsIncognito]       = useState(false);
   const [input, setInput]                   = useState("");
   const [editIdx, setEditIdx]               = useState(null);
   const [editInput, setEditInput]           = useState("");
-  const [copiedAiIdx, setCopiedAiIdx]       = useState(null);
-  const [copiedUserIdx, setCopiedUserIdx]   = useState(null);
   const [selectedMode, setSelectedMode]     = useState(MODES[0].id);
   const [selectedProvider, setSelectedProvider] = useState("OpenRouter");
   const isYtMode     = selectedMode === "youtube";
@@ -2292,14 +1896,6 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  const claudeStylePills = [
-    { label: "Write", icon: PenLine, srcIdx: 1 },
-    { label: "Learn", icon: GraduationCap, srcIdx: 0 },
-    { label: "Code", icon: Code, srcIdx: 2 },
-    { label: "Life stuff", icon: Coffee, srcIdx: 3 },
-    { label: "VetroAI's choice", icon: Lightbulb, srcIdx: 4 },
-  ];
-
   const suggestionOptions = isYtMode
     ? [
         "Paste a YouTube URL below for instant notes",
@@ -2321,7 +1917,7 @@ export default function App() {
           "Current stock market",
           "Recent AI news",
         ]
-        : (t.suggestions || []);
+        : (currentMode.suggestions || []);
 
   // ── YouTube ───────────────────────────────────────────────────────────────────
   const [isYtFetching, setIsYtFetching]     = useState(false);
@@ -2346,6 +1942,13 @@ export default function App() {
 
   // ── Modals ────────────────────────────────────────────────────────────────────
   const [showProfile, setShowProfile]       = useState(false);
+  const [showComputer, setShowComputer]     = useState(false);
+  const [showArtifacts, setShowArtifacts]   = useState(false);
+  const [showUpgrade, setShowUpgrade]       = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [isAgenticMode, setIsAgenticMode] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSysPrompt, setShowSysPrompt]   = useState(false);
   const [showShare, setShowShare]           = useState(false);
   const [showCalc, setShowCalc]             = useState(false);
@@ -2359,15 +1962,6 @@ export default function App() {
   // Artifacts/Canvas panel
   const [artifactCode, setArtifactCode]     = useState(null);
   const [artifactLang, setArtifactLang]     = useState("text");
-  // Projects (Spaces) panel + modal
-  const [showSpaces, setShowSpaces]         = useState(false);
-  const [showSpaceModal, setShowSpaceModal] = useState(false);
-  // Artifacts gallery + active side-panel artifact
-  const [artifacts, setArtifacts]           = useState([]);
-  const [activeArtifact, setActiveArtifact] = useState(null);
-  const [showArtifactsGallery, setShowArtifactsGallery] = useState(false);
-  // Design canvas
-  const [showDesign, setShowDesign]         = useState(false);
   // Persona
   const [activePersona, setActivePersona]   = useState(DEFAULT_PERSONAS[0]);
   const [showPersona, setShowPersona]       = useState(false);
@@ -2404,6 +1998,37 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [isVoiceOpen, setIsVoiceOpen] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
+
+  // ── Input Bar State ──────────────────────────────────────────────────────────
+  const [inputMode, setInputMode] = useState("Search");
+  const [inputDepth, setInputDepth] = useState("Detailed");
+  const [orchestrator, setOrchestrator] = useState("Orchestrator");
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [activeTopTab, setActiveTopTab] = useState("Discover");
+
+  const handleTopTabClick = (tab) => {
+    setActiveTopTab(tab.id);
+    setInputMode(tab.mode || "Search");
+    setActiveDropdown(null);
+    setShowSpaceModal(false);
+    setShowArtifacts(false);
+    setShowRecentsPage(false);
+    setShowUpgrade(false);
+  };
+
+  const handleQuickAction = (action) => {
+    if (action.type === "connect") {
+      setShowGlobalSearch(true);
+      return;
+    }
+    if (action.prompt) {
+      setInput(action.prompt);
+      setSelectedMode(action.id === "build_react_ui" ? "debugger" : "deep_search");
+      setActiveTopTab(action.id === "build_react_ui" ? "Discover" : "Academic");
+      setInputMode(action.id === "build_react_ui" ? "Labs" : "Research");
+      if (textareaRef.current) textareaRef.current.focus();
+    }
+  };
 
   // ── Refs ──────────────────────────────────────────────────────────────────────
   const feedRef        = useRef(null);
@@ -2570,49 +2195,14 @@ export default function App() {
   // ── Session management ────────────────────────────────────────────────────────
   useEffect(() => {
     if (user) {
-      try { const s = localStorage.getItem("vetroai_sessions_" + userKey); if (s) setSessions(JSON.parse(s) || []); } catch { setSessions([]); }
-      try { const sp = localStorage.getItem("vetroai_spaces_" + userKey); if (sp) setSpaces(JSON.parse(sp) || []); } catch { setSpaces([]); }
-      try { const cSpace = localStorage.getItem("vetroai_current_space_" + userKey); if (cSpace) setCurrentSpaceId(cSpace); } catch { setCurrentSpaceId(null); }
-      try { const ar = localStorage.getItem("vetroai_artifacts_" + userKey); if (ar) setArtifacts(JSON.parse(ar) || []); } catch { setArtifacts([]); }
+      try { const s = localStorage.getItem("vetroai_sessions_" + user); if (s) setSessions(JSON.parse(s) || []); } catch { setSessions([]); }
+      try { const sp = localStorage.getItem("vetroai_spaces_" + user); if (sp) setSpaces(JSON.parse(sp) || []); } catch { setSpaces([]); }
+      try { const cSpace = localStorage.getItem("vetroai_current_space_" + user); if (cSpace) setCurrentSpaceId(cSpace); } catch { setCurrentSpaceId(null); }
     }
   }, [user]);
 
-  // ── Billing status (plan + credit balance) ───────────────────────────────────
-  const refreshBillingStatus = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token || token.startsWith("local_")) return;
-    try {
-      const res = await fetch(API + "/billing/me", { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (!res.ok || data.success === false) return;
-      const { plan, credits, subscriptionStatus, planRenewsAt } = data.data;
-      setUserInfo((prev) => {
-        const next = { ...(prev || {}), plan, credits, subscriptionStatus, planRenewsAt };
-        localStorage.setItem("vetroai_userinfo", JSON.stringify(next));
-        return next;
-      });
-    } catch { /* offline or unreachable — keep last known plan */ }
-  }, []);
-
-  useEffect(() => { if (user) refreshBillingStatus(); }, [user, refreshBillingStatus]);
-
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const billing = params.get("billing");
-    if (!billing) return;
-    if (billing === "success") {
-      addToast("Payment received — your plan is being activated.", "success", 4000);
-      refreshBillingStatus();
-    } else if (billing === "cancel") {
-      addToast("Checkout cancelled — no charge was made.", "info", 3000);
-    }
-    params.delete("billing"); params.delete("plan");
-    const cleanUrl = window.location.pathname + (params.toString() ? `?${params}` : "");
-    window.history.replaceState({}, "", cleanUrl);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (messages.length === 0 || !user || isIncognito) return;
+    if (messages.length === 0 || !user) return;
     try {
       const content = messages[0]?.content || "Chat";
       const words = content.split(/\s+/);
@@ -2622,7 +2212,7 @@ export default function App() {
         setCurrentSessionId(id);
         setSessions((prev) => {
           const list = [{ id, title, messages, spaceId: currentSpaceId }, ...prev];
-          try { localStorage.setItem("vetroai_sessions_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
+          try { localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list)); } catch (err) { swallowError(err); }
           return list;
         });
         return;
@@ -2632,14 +2222,14 @@ export default function App() {
         const i = list.findIndex((s) => s.id === currentSessionId);
         if (i !== -1) list[i] = { ...list[i], messages };
         else list.unshift({ id: currentSessionId, title, messages, spaceId: currentSpaceId });
-        try { localStorage.setItem("vetroai_sessions_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
+        try { localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list)); } catch (err) { swallowError(err); }
         return list;
       });
     } catch (err) { swallowError(err); }
   }, [messages, currentSessionId, user]);
 
   const updateSessionTitle = useCallback(async (userMsg, botMsg) => {
-    if (!userMsg || !currentSessionId || isIncognito) return;
+    if (!userMsg || !currentSessionId) return;
     try {
       const payload = botMsg ? `User: ${userMsg}\nAI: ${botMsg}` : userMsg;
       const res  = await fetch(API + "/generate-title", {
@@ -2651,7 +2241,7 @@ export default function App() {
       if (data.title) {
         setSessions(prev => {
           const list = prev.map(s => s.id === currentSessionId ? { ...s, title: data.title } : s);
-          localStorage.setItem("vetroai_sessions_" + userKey, JSON.stringify(list));
+          localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list));
           return list;
         });
       }
@@ -2666,7 +2256,7 @@ export default function App() {
   const newChat = useCallback((spaceIdOverride) => {
     requestIdRef.current += 1;
     abortRef.current?.abort();
-    setMessages([]); setCurrentSessionId(null); setInput(""); setIsIncognito(false); stopSpeak();
+    setMessages([]); setCurrentSessionId(null); setInput(""); stopSpeak();
     setIsSidebarOpen(false); setReactions({}); setFollowUps([]); setMsgFeedback({});
     setIsLoading(false); setIsTyping(false); setIsWebSearching(false); setIsYtFetching(false);
     setStreamingContent(""); setIsContinuing(false);
@@ -2683,60 +2273,18 @@ export default function App() {
 
   const handleSwitchSpace = (spaceId) => {
     setCurrentSpaceId(spaceId);
-    if (spaceId) localStorage.setItem("vetroai_current_space_" + userKey, spaceId);
-    else localStorage.removeItem("vetroai_current_space_" + userKey);
+    if (spaceId) localStorage.setItem("vetroai_current_space_" + user, spaceId);
+    else localStorage.removeItem("vetroai_current_space_" + user);
     newChat(spaceId);
   };
 
-  const saveSpace = (spaceData) => {
-    setSpaces(prev => {
-      const exists = prev.some(s => s.id === spaceData.id);
-      const list = exists ? prev.map(s => s.id === spaceData.id ? spaceData : s) : [...prev, spaceData];
-      try { localStorage.setItem("vetroai_spaces_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
-      return list;
-    });
-    setShowSpaceModal(false); setEditingSpace(null);
-    handleSwitchSpace(spaceData.id);
-    setShowSpaces(false);
-    addToast(`Project "${spaceData.name}" saved`, "success", 2000);
-  };
-
-  const deleteSpaceById = (id) => {
-    setSpaces(prev => {
-      const list = prev.filter(s => s.id !== id);
-      try { localStorage.setItem("vetroai_spaces_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
-      return list;
-    });
-    if (currentSpaceId === id) handleSwitchSpace(null);
-    setShowSpaceModal(false); setEditingSpace(null);
-    addToast("Project deleted", "info", 1500);
-  };
-
-  const saveArtifact = useCallback((code, language, title) => {
-    const artifact = { id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, code, language: language || "text", title: title || "Untitled artifact", createdAt: Date.now() };
-    setArtifacts(prev => {
-      const list = [...prev, artifact].slice(-50);
-      try { localStorage.setItem("vetroai_artifacts_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
-      return list;
-    });
-    setActiveArtifact(artifact);
-  }, [user, userKey]);
-
   const deleteSession = (id) => { setConfirmDelete({ id, message: "Delete this conversation? This cannot be undone." }); };
-
-  const renameSession = (id, newTitle) => {
-    setSessions(prev => {
-      const list = prev.map(s => s.id === id ? { ...s, title: newTitle } : s);
-      try { localStorage.setItem("vetroai_sessions_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
-      return list;
-    });
-  };
 
   const confirmDeleteSession = () => {
     if (!confirmDelete) return;
     const { id } = confirmDelete;
     const list = sessions.filter(s => s.id !== id); setSessions(list);
-    try { localStorage.setItem("vetroai_sessions_" + userKey, JSON.stringify(list)); } catch (err) { swallowError(err); }
+    try { localStorage.setItem("vetroai_sessions_" + user, JSON.stringify(list)); } catch (err) { swallowError(err); }
     if (currentSessionId === id) newChat();
     setPinnedIds(p => p.filter(x => x !== id));
     setConfirmDelete(null);
@@ -2994,6 +2542,50 @@ export default function App() {
     const sel = v.slice(s, e);
     setInput(v.slice(0, s) + pre + (sel || "text") + suf + v.slice(e));
     setTimeout(() => { if (textareaRef.current) { textareaRef.current.focus(); textareaRef.current.setSelectionRange(s + pre.length, s + pre.length + (sel || "text").length); } }, 0);
+  };
+
+  const readSSEStream = async (reader, onChunk, onStatus, onError, isActive, reqId) => {
+    const dec = new TextDecoder();
+    let lineBuffer = "";
+    let accumulated = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!isActive()) return accumulated;
+
+        lineBuffer += dec.decode(value, { stream: true });
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw || raw === "[DONE]") continue;
+
+          try {
+            const { type, data } = JSON.parse(raw);
+            if (type === "content" && data) {
+               accumulated += data;
+               onChunk(accumulated);
+            } else if (type === "clear") {
+               accumulated = "";
+               onChunk("");
+            } else if (type === "status" && data) {
+               onStatus(data);
+            } else if (type === "error" && data) {
+               onError(data);
+            }
+          } catch (err) {
+            console.error("SSE parse error:", err, raw);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("SSE read error:", err);
+      throw err;
+    }
+    return accumulated;
   };
 
   const handleMultiAI = async (hist, baseFd, userQuery, isFirstMsg, ctrl, isActive, reqId) => {
@@ -3377,26 +2969,6 @@ export default function App() {
     setMessages(hist); setEditIdx(null); triggerAI(hist);
   };
 
-  // ── AI message copy / share ──────────────────────────────────────────────────
-  const copyAiMsg   = (i, content) => {
-    navigator.clipboard.writeText(content);
-    setCopiedAiIdx(i);
-    setTimeout(() => setCopiedAiIdx(null), 2000);
-  };
-  const shareAiMsg  = (content) => {
-    if (navigator.share) {
-      navigator.share({ title: 'VetroAi', text: content }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(content);
-      addToast("Copied to clipboard", "info", 2000);
-    }
-  };
-  const copyUserMsg = (i, content) => {
-    navigator.clipboard.writeText(content);
-    setCopiedUserIdx(i);
-    setTimeout(() => setCopiedUserIdx(null), 2000);
-  };
-
   const handleRegen = idx => {
     if (idx === 0) return;
     const hist = messages.slice(0, idx);
@@ -3445,8 +3017,13 @@ export default function App() {
         <div className="auth-hero-orb orb3" />
         <div className="auth-hero-content">
           <div className="auth-hero-logo">
-            <VetroLogo width={160} />
-            <div className="logo-ver" style={{ marginTop: 6 }}>v2.3 · Powered by Mistral</div>
+            <div className="auth-logo-mark" style={{ width: 52, height: 52, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <VetroSpark size={48} color="#fff" />
+            </div>
+            <div>
+              <div className="logo-name" style={{ fontSize: "1.5rem" }}>VetroAI</div>
+              <div className="logo-ver">v2.3 · Powered by Mistral</div>
+            </div>
           </div>
           <h1 className="auth-hero-headline">Your AI study<br />companion.</h1>
           <p className="auth-hero-sub">Smart answers, live web search, YouTube notes, image generation, code playground and more — all in one place.</p>
@@ -3514,10 +3091,11 @@ export default function App() {
 
   const getDynamicGreeting = () => {
     const hrs = new Date().getHours();
-    if (hrs >= 21 || hrs < 5) return "Hello, night owl";
-    if (hrs >= 5 && hrs < 12) return "Good morning";
-    if (hrs >= 12 && hrs < 17) return "Good afternoon";
-    return "Good evening";
+    const namePart = userInfo?.name ? `, ${userInfo.name.split(" ")[0]}` : "";
+    if (hrs >= 21 || hrs < 5) return `Hello, night owl${namePart}`;
+    if (hrs >= 5 && hrs < 12) return `Good morning${namePart}`;
+    if (hrs >= 12 && hrs < 17) return `Good afternoon${namePart}`;
+    return `Good evening${namePart}`;
   };
 
     const toggleDictation = () => {
@@ -3561,651 +3139,492 @@ export default function App() {
     }
   };
 
+  
+  const FEATURE_PROMPTS_MOCK = {
+    triage_email: "Act as an automation agent. Access my unread inbox messages, cluster them by priority, and build a markdown summary table highlighting action items...",
+    deep_research: "Initialize deep research protocol. Traverse multiple target domains, scrape relevant data blocks, synthesize the findings, and generate a multi-page report in the Artifacts tab...",
+    connect_apps: "Initialize OAuth sequence to connect external applications.",
+    finance_tab: "Initialize market scanning tool. Analyze active corporate data streams, evaluate performance charts, and compile a financial tracking index...",
+    academic_tab: "Initialize research collection protocol. Scan global peer-reviewed article databases and surface primary citations matching the target query...",
+    code_agent: "Act as a specialized coding agent to build a React UI."
+  };
+
   const renderInputBox = () => {
     return (
-      <>
-        {lockModelPerChat && messages.length > 0 && (
-          <div className="claude-banner">
-            <span>This chat is locked to <strong>{currentMode.name}</strong>.</span>
-            <button type="button" className="claude-banner-link" onClick={() => setMessages([])}>Start a new chat</button>
-          </div>
-        )}
-        <form className="claude-input-box bg-slate-800 md:bg-[var(--bg-elevated)] border border-slate-700 md:border-[var(--border-str)]" onSubmit={sendMessage}>
-        <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileChange} accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.gif,.webp" />
-        {filePreview && (
-          <div className="file-prev">
-            <img src={filePreview} alt="" />
-            <button type="button" onClick={() => { setSelFile(null); setFilePreview(null); }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-        )}
-        {selFile && !filePreview && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-hover)", border: "1px solid var(--border-med)", borderRadius: 10, padding: "6px 12px", width: "fit-content", marginBottom: 10, fontSize: "0.8rem", color: "var(--ink-2)" }}>
-            📄 {selFile.name}
-            <button type="button" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-4)" }} onClick={() => setSelFile(null)}>✕</button>
-          </div>
-        )}
-
-        <textarea
-          ref={textareaRef}
-          className="placeholder-slate-400 md:placeholder-[var(--ink-4)] text-slate-200 md:text-[var(--ink)]"
-          rows="1"
-          placeholder={
-            isDictating ? t.listening || "Listening..." :
-            isYtMode     ? "Paste a YouTube URL here (e.g. https://youtube.com/watch?v=...)…" :
-            isDeepSearch ? "DeepSearch: ask a research question (I will query multiple angles)..." :
-            isWebMode    ? "Search the web with AI — I fetch real page content…" :
-                           "How can I help you today?"
-          }
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage(e);
-            }
-          }}
-          disabled={isLoading}
-        />
-
-        <div className="claude-input-footer">
-          <div className="claude-footer-left">
-            <button type="button" className="claude-attach-btn" onClick={() => fileInputRef.current?.click()} title="Upload file">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            </button>
-          </div>
-
-          <div className="claude-footer-right">
-            {/* Model selector */}
-            <div className="hidden md:block" style={{ position: "relative" }}>
-              {showModelPicker && <WorkspacePopup
-                currentMode={selectedMode}
-                currentProvider={selectedProvider}
-                onSelectMode={(next) => {
-                  if (lockModelPerChat && messages.length > 0) {
-                    addToast("Model is locked for this chat. Start a new chat to switch.", "info", 2200);
-                    return;
-                  }
-                  setSelectedMode(next);
-                }}
-                onSelectProvider={setSelectedProvider}
-                onClose={() => setShowModelPicker(false)}
-              />}
-              <button type="button" className="mode-pill mode-pill-btn" onClick={() => setShowModelPicker(p => !p)} title="Model selector">
-                <span>{currentMode.name}</span>
-                <svg style={{ transform: showModelPicker ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </button>
-            </div>
-
-            {/* Mic Icon - Dictation placeholder */}
-            <button type="button" className={`claude-action-btn ${isDictating ? "active" : ""}`} onClick={toggleDictation} title="Dictate">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isDictating ? "var(--accent)" : "currentColor"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-            </button>
-
-            {/* Voice Mode / Audio Activity Icon */}
-            {isVoiceOpen ? (
-              <button type="button" className="claude-action-btn active voice" onClick={closeVoice} title="Close voice mode">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            ) : (
-              <button type="button" className="claude-action-btn voice" onClick={() => setIsVoiceOpen(true)} title="Start Voice Mode">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14v-4m4 6V8m4 8V6m4 8V8m4 6v-4" /></svg>
-              </button>
-            )}
-
-            {/* Send / Stop Button */}
-            {isLoading ? (
-              <button type="button" className="claude-send-btn active bg-amber-500 md:bg-[var(--ink)] text-slate-900 md:text-[var(--bg)]" onClick={stopGeneration} title="Stop generating">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
-              </button>
-            ) : (
-              <button
-                type="submit"
-                className={`claude-send-btn ${(!input.trim() && !selFile) ? "claude-send-btn-empty bg-slate-700 md:bg-transparent text-slate-500 md:text-[var(--ink-4)]" : "active bg-amber-500 md:bg-[var(--ink)] text-slate-900 md:text-[var(--bg)]"}`}
-                disabled={!input.trim() && !selFile}
-                title="Send message"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
-      </>
-    );
-  };
-
-  // ── Perplexity-style layout helpers ──────────────────────────────────────────
-
-  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
-  const [isAgenticMode, setIsAgenticMode] = useState(false);
-  const [showUpgrade, setShowUpgrade] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeNav, setActiveNav] = useState('chats');
-  const [recentsSortOpen, setRecentsSortOpen] = useState(false);
-  const [recentsSortMode, setRecentsSortMode] = useState('recent');
-  const [openRecentMenuId, setOpenRecentMenuId] = useState(null);
-  const [renamingId, setRenamingId] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const messagesEndRef = useRef(null);
-
-  const displaySessions = React.useMemo(() => {
-    const mock = [
-      { id: 'm1', title: 'explain all the features of th...' },
-      { id: 'm2', title: 'how to reverse a linked list' },
-      { id: 'm3', title: 'what is the capital of france' },
-    ];
-    if (sessions && sessions.length > 0) {
-      const sorted = [...sessions].sort((a, b) => {
-        const ta = parseInt(a.id, 10) || 0, tb = parseInt(b.id, 10) || 0;
-        return recentsSortMode === 'oldest' ? ta - tb : tb - ta;
-      });
-      return sorted.map(s => ({ id: s.id, title: s.title || 'Untitled' })).slice(0, 10);
-    }
-    return mock;
-  }, [sessions, recentsSortMode]);
-
-  const goToChatsHome = () => {
-    setShowBookmarks(false); setShowPlayground(false); setShowSysPrompt(false);
-    setActiveNav('chats');
-    newChat();
-  };
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.target.closest('.claude-popover, [data-popover-trigger]')) return;
-      setRecentsSortOpen(false);
-      setOpenRecentMenuId(null);
-      setShowAccountMenu(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const renderHomeSearchBox = () => (
-    <div className="w-full max-w-[800px] mx-auto px-4">
-      <div className="bg-white border border-solid border-gray-200/80 rounded-[24px] flex flex-col transition-all duration-300"
-           style={{
-             backgroundColor: "#ffffff",
-             border: "1px solid #e5e7eb",
-             borderRadius: "24px",
-             padding: "20px 20px 14px 20px",
-             boxShadow: "0 10px 40px rgba(20, 184, 166, 0.04), 0 2px 12px rgba(0, 0, 0, 0.01)"
-           }}>
+      <div className="perp-input-wrapper" style={{ width: '100%', maxWidth: 840, margin: '0 auto' }}>
         {selFile && (
-          <div className="flex items-center gap-2 mb-2">
-            <div className="bg-purple-50 text-purple-700 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 font-medium border border-purple-100">
-              <span className="truncate max-w-[150px]">{selFile.name}</span>
-              <button type="button" className="hover:text-purple-900 font-bold" onClick={() => { setSelFile(null); setFilePreview(null); }}>×</button>
+          <div className="perp-attachment-chips">
+            <div className="perp-attachment-chip">
+              <span>{selFile.name}</span>
+              <button type="button" onClick={() => { setSelFile(null); setFilePreview(null); }} aria-label="Remove attachment">×</button>
             </div>
           </div>
         )}
-        <textarea
-          ref={textareaRef}
-          rows="1"
-          placeholder="Ask anything..."
-          value={input}
-          onChange={(e) => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }}
-          className="w-full bg-transparent border-none outline-none resize-none text-[16px] md:text-lg text-gray-800 placeholder-gray-400 py-1"
-          style={{ minHeight: '40px' }}
-        />
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0" title="Attach file">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            </button>
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*,.pdf,.txt,.md,.csv,.json,.xml,.html,.js,.jsx,.ts,.tsx,.py,.java,.cpp,.c,.rb,.go,.rs,.php,.sql,.yaml,.yml" />
-            <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-solid border-gray-200 bg-gray-50 hover:bg-gray-100 text-xs font-semibold text-gray-600 transition-colors flex-shrink-0">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              Search <span className="text-gray-400 text-[9px]">&#9660;</span>
-            </button>
-            <button type="button" onClick={() => setIsAgenticMode(v => !v)} className={"flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-solid text-xs font-semibold transition-all flex-shrink-0 " + (isAgenticMode ? "bg-purple-50 border-purple-200 text-purple-700 shadow-sm" : "bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-600")}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="12" rx="2" ry="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
-              Computer
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-solid border-gray-200 bg-gray-50 hover:bg-gray-100 text-xs font-semibold text-gray-600 transition-colors flex-shrink-0">
-              Model <span className="text-gray-400 text-[9px]">&#9660;</span>
-            </button>
-            <button type="button" onClick={toggleDictation} className={"p-2 rounded-full transition-colors flex-shrink-0 " + (isDictating ? "bg-red-100 text-red-500 animate-pulse" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100")}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-            </button>
-            <button type="submit" onClick={(e) => { e.preventDefault(); sendMessage(e); }} disabled={!input.trim() && !selFile} className="w-9 h-9 bg-[#1a1a1a] hover:bg-black text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center flex-shrink-0 shadow-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <rect x="4" y="14" width="3" height="6" rx="1.5" fill="currentColor" opacity="0.6"/>
-                <rect x="10.5" y="8" width="3" height="12" rx="1.5" fill="currentColor"/>
-                <rect x="17" y="4" width="3" height="16" rx="1.5" fill="currentColor" opacity="0.8"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
-  // ── MAIN UI ────────────────────────────────────────────────────────────────────
-  return (
-    <div className="flex h-screen w-screen overflow-hidden font-sans" style={{ background: 'var(--bg)', color: 'var(--ink)' }}>
-      <Toast toasts={toasts} />
-      {showGlobalSearch && <GlobalSearch onClose={() => setShowGlobalSearch(false)} />}
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} currentPlan={userInfo?.plan || "free"} />}
-{showProfile && <ProfileModal onClose={() => setShowProfile(false)} t={t} langCode={langCode} setLangCode={setLangCode} theme={theme} setTheme={setTheme} userInfo={userInfo} onProfileSaved={setProfileData} />}
-      {showBookmarks && <BookmarksPanel bookmarks={bookmarks} onSelect={() => setShowBookmarks(false)} onRemove={(id) => setBookmarks(prev => prev.filter(b => b.id !== id))} onClose={() => setShowBookmarks(false)} t={t} />}
-      {showPlayground && <CodePlayground onClose={() => setShowPlayground(false)} />}
-      {showSysPrompt && <SysPromptModal onClose={() => setShowSysPrompt(false)} t={t} value={systemPrompt} setValue={setSystemPrompt} />}
-      {confirmDelete && <ConfirmDialog message={confirmDelete.message} onConfirm={confirmDeleteSession} onCancel={() => setConfirmDelete(null)} />}
-      {showSpaces && (
-        <SpacesPanel
-          spaces={spaces}
-          currentSpaceId={currentSpaceId}
-          onOpenSpace={(id) => { handleSwitchSpace(id); setShowSpaces(false); }}
-          onNewSpace={() => { setEditingSpace(null); setShowSpaceModal(true); }}
-          onEditSpace={(sp) => { setEditingSpace(sp); setShowSpaceModal(true); }}
-          onDeleteSpace={deleteSpaceById}
-          onClose={() => setShowSpaces(false)}
-        />
-      )}
-      {showSpaceModal && (
-        <SpaceModal
-          space={editingSpace}
-          onSave={saveSpace}
-          onDelete={deleteSpaceById}
-          onClose={() => { setShowSpaceModal(false); setEditingSpace(null); }}
-        />
-      )}
-      {showArtifactsGallery && (
-        <ArtifactsGallery
-          artifacts={artifacts}
-          onOpen={(a) => { setActiveArtifact(a); setShowArtifactsGallery(false); }}
-          onClose={() => setShowArtifactsGallery(false)}
-        />
-      )}
-      {activeArtifact && <ArtifactsPanel artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />}
-      {showDesign && <DesignCanvas onClose={() => setShowDesign(false)} />}
+        <form className="claude-input-box perp-desktop-input" onSubmit={sendMessage} style={{ position: 'relative' }}>
+          <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.gif,.webp,.py,.js" />
 
-      {/* LEFT SIDEBAR */}
-      <nav className={`claude-sidebar flex-shrink-0 h-full z-10 hidden md:flex transition-all duration-200 overflow-hidden ${sidebarCollapsed ? "w-0" : "w-[240px]"}`} style={{ backgroundColor: "var(--bg-sidebar)", borderRight: "1px solid rgba(28,25,23,0.04)" }}>
-      <div className="flex flex-col h-full" style={{ width: 240, minWidth: 240, padding: "0 8px" }}>
-        {/* Logo + icons row */}
-        <div className="px-2 pt-3 pb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center cursor-pointer min-w-0 vetro-brand-link" onClick={goToChatsHome}>
-            <VetroLogo width={130} />
-          </div>
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <button onClick={() => setShowGlobalSearch(true)} title="Search chats" className="claude-sb-icon-btn flex items-center justify-center rounded-md" style={{ width: 30, height: 30, color: 'var(--ink-3)' }}>
-              <Search size={15} />
+          <div className="perp-input-top-row">
+            <button type="button" className="perp-plus-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             </button>
-            <button onClick={() => setSidebarCollapsed(true)} title="Close sidebar" className="claude-sb-icon-btn flex items-center justify-center rounded-md" style={{ width: 30, height: 30, color: 'var(--ink-3)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-            </button>
-          </div>
-        </div>
 
-        {/* New chat */}
-        <div className="px-1 pb-1">
-          <button onClick={goToChatsHome} className="claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] font-semibold rounded-lg transition-colors">
-            <span className="flex items-center justify-center rounded-full flex-shrink-0" style={{ width: 24, height: 24, background: "var(--bg-active)" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </span>
-            New chat
-          </button>
-        </div>
-
-        {/* Main nav */}
-        <div className="px-1 flex flex-col gap-0.5">
-          <button onClick={() => { setActiveNav('chats'); setShowBookmarks(false); setShowPlayground(false); setShowSysPrompt(false); setShowSpaces(false); setShowArtifactsGallery(false); setShowDesign(false); }} className={`claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'chats' && !currentSessionId ? 'active' : ''}`}>
-            <MessageSquare size={17} /> Chats
-          </button>
-          <button onClick={() => { setActiveNav('projects'); setShowSpaces(true); }} className={`claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'projects' ? 'active' : ''}`}>
-            <FolderClosed size={17} /> Projects
-          </button>
-          <button onClick={() => { setActiveNav('artifacts'); setShowArtifactsGallery(true); }} className={`claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'artifacts' ? 'active' : ''}`}>
-            <LayoutGrid size={17} /> Artifacts
-          </button>
-          <button onClick={() => { setActiveNav('customize'); setShowSysPrompt(true); }} className={`claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'customize' ? 'active' : ''}`}>
-            <SlidersHorizontal size={17} /> Customize
-          </button>
-        </div>
-
-        {/* Products section */}
-        <div className="px-1 flex flex-col gap-0.5" style={{ marginTop: 12 }}>
-          <p className="claude-sb-group-label text-[11.5px] font-medium px-3 py-1" style={{ color: 'var(--ink-4)' }}>Products</p>
-          <button onClick={() => { setActiveNav('code'); setShowPlayground(true); }} className={`claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'code' ? 'active' : ''}`}>
-            <Code size={17} /> Code
-          </button>
-          <button onClick={() => { setActiveNav('design'); setShowDesign(true); }} className={`claude-sb-item flex items-center justify-between gap-3 w-full px-3 py-2 text-[13.5px] rounded-lg transition-colors ${activeNav === 'design' ? 'active' : ''}`}>
-            <span className="flex items-center gap-3"><Palette size={17} /> Design</span>
-            <FlaskConical size={13} style={{ color: "var(--ink-4)" }} />
-          </button>
-        </div>
-
-        {/* Recents section */}
-        <div className="claude-sb-recents-scroll flex-1 overflow-y-auto px-1 flex flex-col" style={{ marginTop: 12, gap: 2 }}>
-          {displaySessions.length > 0 && (
-            <div className="flex items-center justify-between px-3 py-1 mb-0.5 relative">
-              <p className="claude-sb-group-label text-[11.5px] font-medium" style={{ color: 'var(--ink-4)' }}>Recents</p>
-              <button onClick={() => setRecentsSortOpen(o => !o)} title="Sort recents" data-popover-trigger className="claude-sb-icon-btn flex items-center justify-center rounded-md" style={{ width: 22, height: 22, color: "var(--ink-4)" }}>
-                <SlidersHorizontal size={14} />
+            <div className="perp-dropdown-wrapper">
+              <button type="button" className="perp-dropdown-btn" onClick={() => setActiveDropdown(activeDropdown === 'mode' ? null : 'mode')}>
+                {inputMode} <span style={{ fontSize: 12 }}>▾</span>
               </button>
-              {recentsSortOpen && (
-                <div className="claude-popover" style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 30 }}>
-                  <button onClick={() => { setRecentsSortMode('recent'); setRecentsSortOpen(false); }} className={`claude-popover-item ${recentsSortMode === 'recent' ? 'active' : ''}`}>Most recent</button>
-                  <button onClick={() => { setRecentsSortMode('oldest'); setRecentsSortOpen(false); }} className={`claude-popover-item ${recentsSortMode === 'oldest' ? 'active' : ''}`}>Oldest</button>
+              {activeDropdown === 'mode' && (
+                <div className="perp-dropdown-menu">
+                  {INPUT_MODE_OPTIONS.map(option => (
+                    <button key={option} type="button" onClick={() => { setInputMode(option); setActiveDropdown(null); }}>
+                      {option}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          )}
-          {displaySessions.map((session) => {
-            const isMock = String(session.id).startsWith('m');
-            const isActive = activeNav === 'chats' && currentSessionId === session.id;
-            const isRenaming = renamingId === session.id;
-            return (
-              <div key={session.id} className="claude-sb-recent-row group relative">
-                {isRenaming ? (
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { renameSession(session.id, renameValue.trim() || session.title); setRenamingId(null); }
-                      if (e.key === 'Escape') setRenamingId(null);
-                    }}
-                    onBlur={() => setRenamingId(null)}
-                    className="claude-sb-recent-input text-left px-3 py-2 text-[13px] rounded-md w-full"
-                  />
-                ) : (
-                  <button onClick={() => { loadSession(session.id); setActiveNav('chats'); }} className={`claude-sb-recent text-left px-3 py-[9px] text-[13px] rounded-md truncate transition-colors w-full ${!isMock ? "pr-8" : ""} ${isActive ? 'active' : ''}`}>
-                    {session.title}
-                  </button>
-                )}
-                {!isMock && !isRenaming && (
-                  <button onClick={(e) => { e.stopPropagation(); setOpenRecentMenuId(openRecentMenuId === session.id ? null : session.id); }} title="More" data-popover-trigger className="claude-sb-recent-more opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-md">
-                    <MoreHorizontal size={14} />
-                  </button>
-                )}
-                {openRecentMenuId === session.id && (
-                  <div className="claude-popover" style={{ position: "absolute", top: "calc(100% + 2px)", right: 4, zIndex: 30 }}>
-                    <button onClick={() => { setRenamingId(session.id); setRenameValue(session.title); setOpenRecentMenuId(null); }} className="claude-popover-item">
-                      <Pencil size={13} /> Rename
-                    </button>
-                    <button onClick={() => { deleteSession(session.id); setOpenRecentMenuId(null); }} className="claude-popover-item danger">
-                      <Trash2 size={13} /> Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="claude-sb-footer p-3 flex flex-col gap-0.5 relative">
-          {userInfo?.plan !== "pro" && (
-            <button onClick={() => setShowUpgrade(true)} className="claude-sb-item flex items-center gap-3 w-full px-3 py-2 text-sm font-semibold rounded-lg transition-colors">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg> Upgrade plan
+
+            <button type="button" className={`perp-pill-btn ${isAgenticMode ? 'active' : ''}`} onClick={() => setIsAgenticMode(!isAgenticMode)} aria-pressed={isAgenticMode} title="Toggle computer mode">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="12" rx="2" ry="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
+              Computer
             </button>
-          )}
-          <div onClick={() => setShowAccountMenu(o => !o)} data-popover-trigger className="claude-sb-item flex items-center gap-2 w-full px-3 py-2 text-sm font-semibold rounded-lg transition-colors mt-1 cursor-pointer">
-            <div className="w-9 h-9 flex items-center justify-center text-xs flex-shrink-0" style={{ background: "var(--ink)", color: "var(--bg)", borderRadius: 8 }}>{(userInfo?.name || "U")[0].toUpperCase()}</div>
-            <span className="flex flex-col items-start flex-1 min-w-0 leading-tight">
-              <span className="truncate w-full text-left">{userInfo?.name || "User"}</span>
-              <span className="truncate w-full text-left text-[11px] font-normal" style={{ color: "var(--ink-4)" }}>
-                {userInfo?.plan === "team" ? "Team plan" : userInfo?.plan === "pro" ? "Pro plan" : "Free plan"}
-                {typeof userInfo?.credits === "number" && (
-                  <span className={`sb-credit-pill${userInfo.credits <= 5 ? " low" : ""}`}>{userInfo.credits} credits</span>
-                )}
-              </span>
-            </span>
-            <button onClick={(e) => { e.stopPropagation(); addToast("Coming soon", "info", 1500); }} title="Get the app" className="claude-footer-icon-btn" style={{ color: "var(--ink-4)" }}>
-              <Download size={15} />
+
+            <button type="button" className="perp-dropdown-btn" onClick={() => setInputDepth(prev => (prev === 'Detailed' ? 'Concise' : 'Detailed'))} title="Toggle response length">
+              {inputDepth} <span style={{ fontSize: 12, marginLeft: 2 }}>⇅</span>
             </button>
-            {showAccountMenu ? <ChevronUp size={16} style={{ color: "var(--ink-4)" }} className="flex-shrink-0" /> : <ChevronDown size={16} style={{ color: "var(--ink-4)" }} className="flex-shrink-0" />}
-          </div>
-          {showAccountMenu && (
-            <div className="claude-popover" style={{ position: "absolute", bottom: "calc(100% - 4px)", left: 8, right: 8, zIndex: 30 }}>
-              <button onClick={() => { setShowProfile(true); setShowAccountMenu(false); }} className="claude-popover-item"><Settings size={14} /> Settings</button>
-              <button onClick={() => { addToast("Coming soon", "info", 1500); setShowAccountMenu(false); }} className="claude-popover-item"><HelpCircle size={14} /> Help</button>
-              <button onClick={() => { logout(); setShowAccountMenu(false); }} className="claude-popover-item danger"><LogOut size={14} /> Log out</button>
+
+            <div className="perp-dropdown-wrapper">
+              <button type="button" className="perp-dropdown-btn" onClick={() => setActiveDropdown(activeDropdown === 'orch' ? null : 'orch')}>
+                {orchestrator} <span style={{ fontSize: 12 }}>▾</span>
+              </button>
+              {activeDropdown === 'orch' && (
+                <div className="perp-dropdown-menu">
+                  {ORCHESTRATOR_OPTIONS.map(option => (
+                    <button key={option} type="button" onClick={() => { setOrchestrator(option); setActiveDropdown(null); }}>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          <div className="perp-input-bottom-row">
+            <textarea
+              ref={textareaRef}
+              rows="1"
+              placeholder="Ask anything..."
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }}
+              disabled={isLoading}
+              className="perp-textarea"
+            />
+            <div className="perp-input-right-tools">
+              <button type="button" className={`perp-mic-btn ${isDictating ? 'active' : ''}`} onClick={toggleDictation} title={isDictating ? 'Stop dictation' : 'Start dictation'}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+              </button>
+              {isLoading ? (
+                <button type="button" onClick={() => setIsLoading(false)} className="perp-send-btn" title="Stop generation">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>
+                </button>
+              ) : (
+                <button type="submit" className="perp-send-btn" title="Send message" disabled={!input.trim() && !selFile}>
+                  <SendIcon />
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
+  const renderHomeSearchBox = () => {
+    return (
+      <div className="home-search-card">
+        <div className="home-search-top">
+          <button type="button" className="perp-plus-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+
+          <div className="home-search-pill-group">
+            <div className="perp-dropdown-wrapper">
+              <button type="button" className="perp-dropdown-btn" onClick={() => setActiveDropdown(activeDropdown === 'mode' ? null : 'mode')}>
+                {inputMode} <span style={{ fontSize: 12 }}>▾</span>
+              </button>
+              {activeDropdown === 'mode' && (
+                <div className="perp-dropdown-menu">
+                  {INPUT_MODE_OPTIONS.map(option => (
+                    <button key={option} type="button" onClick={() => { setInputMode(option); setActiveDropdown(null); }}>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button type="button" className={`perp-pill-btn ${isAgenticMode ? 'active' : ''}`} onClick={() => setIsAgenticMode(!isAgenticMode)} aria-pressed={isAgenticMode} title="Toggle computer mode">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="12" rx="2" ry="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
+              Computer
+            </button>
+          </div>
+
+          <div className="home-search-right">
+            <div className="perp-dropdown-wrapper">
+              <button type="button" className="perp-dropdown-btn" onClick={() => setActiveDropdown(activeDropdown === 'orch' ? null : 'orch')}>
+                Model <span style={{ fontSize: 12 }}>▾</span>
+              </button>
+              {activeDropdown === 'orch' && (
+                <div className="perp-dropdown-menu">
+                  {ORCHESTRATOR_OPTIONS.map(option => (
+                    <button key={option} type="button" onClick={() => { setOrchestrator(option); setActiveDropdown(null); }}>
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button type="button" className={`perp-mic-btn ${isDictating ? 'active' : ''}`} onClick={toggleDictation} title={isDictating ? 'Stop dictation' : 'Start dictation'}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="home-search-input-row">
+          <input
+            type="text"
+            className="home-search-input"
+            placeholder="Type @ for connectors and sources"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(e); } }}
+          />
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="shell light-theme">
+      <Toast toasts={toasts} />
+
+      {/* MOBILE SIDEBAR OVERLAY */}
+      <div className={`mobile-sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
+      
+      <div className={`mobile-sidebar-drawer ${isSidebarOpen ? 'open' : ''}`}>
+         <div className="msd-header">
+            <div className="msd-logo">
+               <VetroSpark size={24} color="#000" />
+            </div>
+            <button className="msd-new-btn" onClick={() => { newChat(); setIsSidebarOpen(false); }}>
+               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+               New
+            </button>
+         </div>
+         
+         <div className="msd-nav">
+            <button className="msd-nav-item" onClick={(e) => { setIsSidebarOpen(false); sendMessage(e, FEATURE_PROMPTS[2]); }}>
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+               <span>Computer</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button className="msd-nav-item" onClick={(e) => { setIsSidebarOpen(false); sendMessage(e, FEATURE_PROMPTS[18]); }}>
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+               <span>Spaces</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button className="msd-nav-item" onClick={() => setIsSidebarOpen(false)}>
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+               <span>Artifacts</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button className="msd-nav-item" onClick={(e) => { setIsSidebarOpen(false); sendMessage(e, FEATURE_PROMPTS[19]); }}>
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+               <span>Customize</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button className="msd-nav-item">
+               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+               <span>History</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+         </div>
+
+         <div className="msd-history-list">
+            {messages.length > 0 && messages.map((msg, i) => msg.role === "user" && (
+                <div key={i} className="msd-history-item">{msg.content.substring(0, 30)}...</div>
+            ))}
+         </div>
+
+         <div className="msd-footer">
+            <button className="msd-profile-btn" onClick={() => { setShowProfile(true); setIsSidebarOpen(false); }}>
+               <div className="msd-avatar">{(userInfo?.name || "U")[0].toUpperCase()}</div>
+               <span>{userInfo?.name || "User"}</span>
+               <svg className="msd-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button className="msd-settings-icon" onClick={(e) => { setIsSidebarOpen(false); sendMessage(e, FEATURE_PROMPTS[19]); }}>
+               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+         </div>
+      </div>
+
+            {showGlobalSearch && <GlobalSearch onClose={() => setShowGlobalSearch(false)} />}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+      {showProfile   && <ProfileModal onClose={() => setShowProfile(false)} t={t} langCode={langCode} setLangCode={setLangCode} theme={theme} setTheme={setTheme} userInfo={userInfo} onProfileSaved={setProfileData} />}
+
+      {/* LEFT RAIL (DESKTOP ONLY) */}
+      
+      
+      <nav className="desktop-left-rail">
+        <div className="rail-top">
+          <div className="rail-logo-area" onClick={() => {
+             setShowComputer(false); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false);
+          }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="vetro-logo-svg">
+              <path d="M12 2L2 22h20L12 2z"/>
+              <circle cx="12" cy="14" r="3" className="heartbeat-pulse" />
+            </svg>
+            <span style={{ fontWeight: 700, fontSize: '1rem', color: '#111827' }}>VetroAI</span>
+          </div>
+          <button className="rail-new-btn" onClick={() => { setShowComputer(false); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false); setMessages([]); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+            New
+          </button>
+        </div>
+
+        <div className="rail-scroll-area">
+          <div className="rail-nav">
+            <button className={`rail-nav-item ${!showComputer && !showSpaceModal && !showArtifacts && !showRecentsPage ? 'active' : ''}`} onClick={() => { setShowComputer(false); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false); }} title="Home">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+               Home
+            </button>
+            <button className={`rail-nav-item ${showComputer ? 'active' : ''}`} onClick={() => { setShowComputer(true); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false); }} title="Computer Dashboard">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+               Computer
+            </button>
+            <button className={`rail-nav-item ${showSpaceModal ? 'active' : ''}`} onClick={() => { setShowSpaceModal(true); setShowComputer(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false); }} title="Spaces">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+               Spaces
+            </button>
+            <button className={`rail-nav-item ${showArtifacts ? 'active' : ''}`} onClick={() => { setShowArtifacts(true); setShowComputer(false); setShowSpaceModal(false); setShowRecentsPage(false); setShowUpgrade(false); }} title="Artifacts">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+               Artifacts
+            </button>
+            <button className={`rail-nav-item`} onClick={() => { setShowProfile(true); setShowComputer(false); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowUpgrade(false); }} title="Customize">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/><path d="M6.5 19.5h11"/><path d="M6.5 15.5h11"/><path d="M6.5 11.5h11"/></svg>
+               Customize
+            </button>
+            <button className={`rail-nav-item ${showRecentsPage ? 'active' : ''}`} onClick={() => { setShowRecentsPage(true); setShowArtifacts(false); setShowComputer(false); setShowSpaceModal(false); setShowUpgrade(false); }} title="History">
+               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+               History
+            </button>
+          </div>
+        </div>
+        <div className="rail-bottom">
+           <button className="rail-profile" onClick={() => setShowProfile(true)}>
+             <div className="avatar">V</div>
+             <span>Sign in</span>
+           </button>
+        </div>
       </nav>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col relative h-full w-full overflow-hidden" style={{ backgroundColor: "var(--bg)" }}>
+
+
+      
+      {/* MOBILE BOTTOM NAVIGATION */}
+      <nav className="mobile-bottom-nav">
+        <button className={`mobile-nav-btn ${!showSpaceModal && !showArtifacts && !showRecentsPage && !showProfile && messages.length === 0 ? 'active' : ''}`} onClick={() => { setShowComputer(false); setShowSpaceModal(false); setShowArtifacts(false); setShowRecentsPage(false); setShowProfile(false); setMessages([]); }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Home
+        </button>
+        <button className={`mobile-nav-btn ${showRecentsPage ? 'active' : ''}`} onClick={() => { setShowRecentsPage(true); setShowSpaceModal(false); setShowArtifacts(false); setShowComputer(false); setShowProfile(false); }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Chats
+        </button>
         
-        {/* Top Header */}
-        <header className="chat-header">
-          <div className="ch-left" style={{ position: "relative" }}>
-            {sidebarCollapsed && (
-              <button type="button" onClick={() => setSidebarCollapsed(false)} title="Open sidebar" className="claude-sb-item claude-sb-icon-btn hidden md:flex items-center justify-center rounded-md" style={{ marginRight: 4 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-              </button>
-            )}
-            {currentSpaceId && (() => {
-              const sp = spaces.find(s => s.id === currentSpaceId);
-              if (!sp) return null;
-              const Icon = (SPACE_ICONS.find(i => i.id === sp.icon) || SPACE_ICONS[0]).icon;
-              return (
-                <div className="active-space-pill" style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: `${sp.color || SPACE_COLORS[0]}1a`, color: sp.color || SPACE_COLORS[0], fontSize: 12.5, fontWeight: 600 }}>
-                  <Icon size={13} />
-                  <span>{sp.name}</span>
-                  <button onClick={() => handleSwitchSpace(null)} title="Exit project" style={{ background: "none", border: "none", color: "inherit", display: "flex", alignItems: "center", cursor: "pointer", opacity: 0.7, padding: 0 }}>
-                    <X size={12} />
-                  </button>
-                </div>
-              );
-            })()}
+        <div className="mobile-fab-container">
+          <button className="mobile-fab" onClick={() => { newChat(); setShowRecentsPage(false); setShowComputer(false); setShowArtifacts(false); setShowSpaceModal(false); setShowProfile(false); }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        <button className={`mobile-nav-btn ${showSpaceModal ? 'active' : ''}`} onClick={() => { setShowSpaceModal(true); setShowRecentsPage(false); setShowArtifacts(false); setShowComputer(false); setShowProfile(false); }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          Spaces
+        </button>
+        <button className={`mobile-nav-btn ${showArtifacts ? 'active' : ''}`} onClick={() => { setShowArtifacts(true); setShowSpaceModal(false); setShowRecentsPage(false); setShowComputer(false); setShowProfile(false); }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Artifacts
+        </button>
+      </nav>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="main-content light-mode-main">
+
+        {/* NEW MOBILE HAMBURGER HEADER */}
+        <div className="mobile-only mobile-header">
+          <button onClick={() => setIsMobileMenuOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--ink)', cursor: 'pointer' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style={{ fontWeight: 600, fontSize: '1.1rem', letterSpacing: '-0.5px' }}>VetroAI</div>
+          <div style={{ width: 24 }}></div>
+        </div>
+
+        {/* MOBILE SLIDE-OUT DRAWER */}
+        <div className={`mobile-drawer ${isMobileMenuOpen ? 'open' : ''}`} style={{ position: 'fixed', top: 0, left: isMobileMenuOpen ? 0 : '-100%', bottom: 0, width: 280, background: 'var(--bg)', zIndex: 100, transition: 'left 0.3s ease', boxShadow: isMobileMenuOpen ? '4px 0 24px rgba(0,0,0,0.1)' : 'none', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: 20, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontWeight: 600, fontSize: '1.2rem' }}>Menu</span>
+            <button onClick={() => setIsMobileMenuOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div className="ch-right">
-            <button type="button" className="claude-sb-item claude-sb-icon-btn flex items-center justify-center rounded-md" onClick={() => { setMessages([]); setCurrentSessionId(null); setIsIncognito(true); addToast("Incognito mode — this chat won't be saved.", "info", 2500); }} title="Incognito chat" style={{ color: isIncognito ? '#A77BF5' : "var(--ink-4)" }}>
-              <Ghost size={18} />
-            </button>
-            {messages.length > 0 && (
-              <button type="button" className="share-btn" onClick={() => setShowShare(true)} title="Share chat">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                <span>Share</span>
-              </button>
-            )}
+          <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <button style={{ background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: 500, color: 'var(--ink)' }} onClick={() => { setIsMobileMenuOpen(false); newChat(); }}>New Chat</button>
+            <button style={{ background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: 500, color: 'var(--ink)' }} onClick={() => { setIsMobileMenuOpen(false); setShowComputer(true); }}>Computer</button>
+            <button style={{ background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: 500, color: 'var(--ink)' }} onClick={() => { setIsMobileMenuOpen(false); setShowSpaceModal(true); }}>Spaces</button>
+            <button style={{ background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: 500, color: 'var(--ink)' }} onClick={() => { setIsMobileMenuOpen(false); setShowArtifacts(true); }}>Artifacts</button>
+            <button style={{ background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: 500, color: 'var(--ink)' }} onClick={() => { setIsMobileMenuOpen(false); setShowRecentsPage(true); }}>History</button>
           </div>
+        </div>
+        {isMobileMenuOpen && <div onClick={() => setIsMobileMenuOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99 }}></div>}
+
+
+        {/* DESKTOP TOP NAV */}
+        <header className="desktop-top-nav">
+           <div className="dtn-left">
+              <button className="dtn-plan-btn">Free plan</button>
+              <button className="dtn-upgrade-btn">Upgrade</button>
+           </div>
+           <div className="dtn-center">
+              <button className={`dtn-tab ${activeTopTab === 'Discover' ? 'active' : ''}`} onClick={() => handleTopTabClick({ id: 'Discover', mode: 'normal' })}>Discover</button>
+              <button className={`dtn-tab ${activeTopTab === 'Finance' ? 'active' : ''}`} onClick={() => handleTopTabClick({ id: 'Finance', mode: 'analyst' })}>Finance</button>
+              <button className={`dtn-tab ${activeTopTab === 'Health' ? 'active' : ''}`} onClick={() => handleTopTabClick({ id: 'Health', mode: 'summarize' })}>Health</button>
+              <button className={`dtn-tab ${activeTopTab === 'Academic' ? 'active' : ''}`} onClick={() => handleTopTabClick({ id: 'Academic', mode: 'deep_search' })}>Academic</button>
+              <button className={`dtn-tab ${activeTopTab === 'Patents' ? 'active' : ''}`} onClick={() => handleTopTabClick({ id: 'Patents', mode: 'normal' })}>Patents</button>
+           </div>
+           <div className="dtn-right">
+              <button className="dtn-icon" onClick={(e) => sendMessage(e, FEATURE_PROMPTS[14])}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+              <button className="dtn-icon" onClick={(e) => sendMessage(e, FEATURE_PROMPTS[18])}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></button>
+              <button className="dtn-icon" onClick={(e) => sendMessage(e, FEATURE_PROMPTS[17])}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></button>
+           </div>
         </header>
-        {showShare && <ShareModal onClose={() => setShowShare(false)} t={t} messages={messages} />}
 
-        {/* Incognito banner */}
-        {isIncognito && (
-          <div style={{ background: 'linear-gradient(90deg, #2a1a4a, #1a1a3a)', borderBottom: '1px solid rgba(167,123,245,0.25)', padding: '6px 20px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <Ghost size={14} style={{ color: '#A77BF5' }} />
-            <span style={{ fontSize: 12, color: '#C4A8F8', fontFamily: "'Inter', sans-serif" }}>Incognito — this conversation won't be saved to history</span>
-            <button onClick={() => { setIsIncognito(false); addToast("Incognito off", "info", 1500); }} style={{ marginLeft: 'auto', fontSize: 11, color: '#8B6DBF', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}>Turn off</button>
+        {showComputer ? <ComputerUI onClose={() => setShowComputer(false)} /> : 
+         showSpaceModal ? <SpacesHub onClose={() => setShowSpaceModal(false)} /> : 
+         showArtifacts ? <ArtifactsGallery onClose={() => setShowArtifacts(false)} /> : 
+         showRecentsPage ? (
+          <div className="recents-page" style={{ padding: '24px 40px', color: 'var(--ink)', maxWidth: 800, margin: '0 auto', width: '100%' }}>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: 20, fontWeight: 500 }}>History</h2>
+            <input type="text" placeholder="Search history..." style={{ padding: '10px 16px', width: '100%', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--ink)', marginBottom: 32, fontSize: '1rem' }} />
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div>
+                 <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today</h3>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {savedSessions.slice(0, 3).map(s => (
+                      <div key={s.id} onClick={() => loadSession(s.id)} style={{ cursor: "pointer", background: "transparent", borderBottom: "1px solid var(--border)", padding: '12px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: "1rem", fontWeight: 400, color: "var(--ink)" }}>{s.title || "Untitled Chat"}</div>
+                        <div style={{ fontSize: "0.85rem", color: "var(--ink-4)" }}>{new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+
+              <div>
+                 <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yesterday</h3>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {savedSessions.slice(3, 7).map(s => (
+                      <div key={s.id} onClick={() => loadSession(s.id)} style={{ cursor: "pointer", background: "transparent", borderBottom: "1px solid var(--border)", padding: '12px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: "1rem", fontWeight: 400, color: "var(--ink)" }}>{s.title || "Untitled Chat"}</div>
+                        <div style={{ fontSize: "0.85rem", color: "var(--ink-4)" }}>{new Date(s.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+
+              <div>
+                 <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Previous 7 Days</h3>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {savedSessions.slice(7, 15).map(s => (
+                      <div key={s.id} onClick={() => loadSession(s.id)} style={{ cursor: "pointer", background: "transparent", borderBottom: "1px solid var(--border)", padding: '12px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: "1rem", fontWeight: 400, color: "var(--ink)" }}>{s.title || "Untitled Chat"}</div>
+                        <div style={{ fontSize: "0.85rem", color: "var(--ink-4)" }}>{new Date(s.updatedAt).toLocaleDateString()}</div>
+                      </div>
+                    ))}
+                 </div>
+              </div>
+            </div>
           </div>
-        )}
-
-        {/* Content Area */}
-        <div className={`flex-1 flex flex-col w-full relative ${messages.length === 0 ? 'items-center overflow-y-auto px-4' : 'overflow-hidden'}`}
-          style={isIncognito && messages.length > 0 ? { background: 'linear-gradient(180deg, rgba(30,18,60,0.06) 0%, transparent 120px)' } : {}}>
-             {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center w-full max-w-3xl mx-auto py-10" style={{ marginTop: "auto", marginBottom: "auto" }}>
-                  <div className="mb-8 text-center animate-fade-in w-full mt-10 md:mt-16">
-                    <h2 className="text-[40px] md:text-[44px] font-normal" style={{ fontFamily: "var(--font-serif)", color: "var(--ink)" }}>{getDynamicGreeting()}</h2>
-                  </div>
-                  <div className="w-full">
-                    {renderInputBox()}
-                  </div>
-                  {suggestionOptions.length > 0 && (
-                    <div className="claude-suggestion-pills-row">
-                      <div className="claude-suggestion-pills" style={{ justifyContent: "center", padding: 0 }}>
-                        {!(isYtMode || isDeepSearch || isWebMode) && suggestionOptions.length >= 5
-                          ? claudeStylePills.map(({ label, icon: Icon, srcIdx }) => (
-                              <button key={label} type="button" className="claude-pill" onClick={() => sendMessage(null, suggestionOptions[srcIdx])}>
-                                <Icon size={16} />
-                                <span>{label}</span>
-                              </button>
-                            ))
-                          : suggestionOptions.slice(0, 5).map((s, idx) => {
-                              const Icon = [GraduationCap, Paintbrush, Terminal, Coffee, Compass][idx % 5];
-                              return (
-                                <button key={idx} type="button" className="claude-pill" onClick={() => sendMessage(null, s)}>
-                                  <Icon size={16} />
-                                  <span className="truncate" style={{ maxWidth: 220 }}>{s}</span>
-                                </button>
-                              );
-                            })}
+        ) : (
+          <div className="chat-container">
+            {messages.length === 0 ? (
+               <div className="perp-hero-section perp-home-container" style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center' }}>
+                  <div style={{ width: '100%', maxWidth: 840, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="perp-hero-logo">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2L2 22h20L12 2z"/>
+                        <circle cx="12" cy="14" r="3" />
+                      </svg>
+                      <h1>VetroAI computer</h1>
+                    </div>
+                    {renderHomeSearchBox()}
+                    <div className="perp-home-footer">
+                      <div className="perp-suggestion-grid">
+                        {HOME_HERO_CARDS.map(action => (
+                          <button key={action.id} type="button" className="perp-grid-btn" onClick={() => {
+                            if (action.id === 'computer_work') {
+                              setIsAgenticMode(true);
+                            }
+                            if (action.id === 'search_anything') {
+                              setInput('');
+                            }
+                          }}>
+                            <span className="perp-grid-title">{action.title}</span>
+                            <span className="perp-grid-description">{action.subtitle}</span>
+                            {action.label && <span className="perp-grid-pill-new">{action.label}</span>}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  )}
-                </div>
-             ) : (
-               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-                 <div className="claude-feed-scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: 160 }} ref={feedRef} onScroll={handleScroll}>
-                   <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px 0' }}>
+                  </div>
+               </div>
+            ) : (
+               <>
+                 <div className="messages-list" ref={feedRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', paddingBottom: 24, position: 'relative' }}>
                    {messages.map((m, i) => (
-                     <div key={i} className={`flex w-full mb-6 ${m.role === 'user' ? 'justify-end' : 'justify-start gap-3'}`}>
-
-                       {/* ── AI avatar ── */}
-                       {m.role !== 'user' && (
-                         <div className="flex-shrink-0 mt-1">
-                           <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #4F7CFF 0%, #8B5CF6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                             <VetroSparkWhite size={22} />
-                           </div>
-                         </div>
-                       )}
-
-                       {/* ── USER MESSAGE ── */}
-                       {m.role === 'user' ? (
-                         <div className="flex flex-col items-end gap-1 group/user">
-                           {editIdx === i ? (
-                             <div className="user-edit-wrap">
-                               <textarea
-                                 className="user-edit-textarea"
-                                 value={editInput}
-                                 onChange={e => setEditInput(e.target.value)}
-                                 onKeyDown={e => {
-                                   if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submitEdit(i); }
-                                   if (e.key === 'Escape') setEditIdx(null);
-                                 }}
-                                 autoFocus
-                                 aria-label="Edit your message"
-                               />
-                               <div className="user-edit-actions">
-                                 <button className="ai-edit-btn-cancel" onClick={() => setEditIdx(null)}>Cancel</button>
-                                 <button className="ai-edit-btn-save" onClick={() => submitEdit(i)}>Save &amp; Send</button>
-                               </div>
-                             </div>
-                           ) : (
-                             <>
-                               <div className="chat-user-bubble">{m.content}</div>
-                               <div className="user-msg-acts">
-                                 <button className="msg-action-btn" onClick={() => { setEditIdx(i); setEditInput(m.content); }} title="Edit message" aria-label="Edit message">
-                                   <EditIcon /><span>Edit</span>
-                                 </button>
-                                 <button className="msg-action-btn" onClick={() => copyUserMsg(i, m.content)} title="Copy message" aria-label="Copy message">
-                                   <CopyIcon /><span>{copiedUserIdx === i ? 'Copied!' : 'Copy'}</span>
-                                 </button>
-                               </div>
-                             </>
-                           )}
-                         </div>
-
-                       /* ── NORMAL AI MESSAGE ── */
-                       ) : (
-                         <div className="flex-1 min-w-0 msg-row">
-                           <div className="claude-prose" style={{ color: "var(--ink)", fontFamily: "'Inter', system-ui, sans-serif", fontSize: '15px', lineHeight: '1.7' }}>
-                             {!m.content && isLoading
-                               ? <div style={{ paddingTop: 4, color: "var(--ink-3)" }}>
-                                   <div className="flex gap-2 items-center">
-                                     <div className="flex gap-1 items-center">
-                                       <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)' }} />
-                                       <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)', animationDelay: '0.15s' }} />
-                                       <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)', animationDelay: '0.3s' }} />
-                                     </div>
-                                     <span style={{ fontSize: 13 }}>{getStatusLabel(streamStatus, selectedMode)}</span>
-                                   </div>
-                                 </div>
-                               : hasStructuredContent(m.content)
-                                 ? <StructuredResponseRenderer response={m.content} />
-                                 : isWritingBlock(m.content)
-                                   ? <WritingBlockCard content={m.content} />
-                                   : <ReactMarkdown
-                                       remarkPlugins={[remarkGfm]}
-                                       components={{
-                                         code({ inline, className, children }) {
-                                           const codeString = String(children).replace(/\n$/, "");
-                                           const langMatch = /language-(\w+)/.exec(className || "");
-                                           if (inline || !langMatch) return <code className={className}>{children}</code>;
-                                           const isArtifactWorthy = codeString.split("\n").length >= 4;
-                                           return (
-                                             <CodeBlock
-                                               match={langMatch}
-                                               codeString={codeString}
-                                               onSaveArtifact={isArtifactWorthy ? () => saveArtifact(codeString, langMatch[1], `${langMatch[1]} snippet`) : null}
-                                             />
-                                           );
-                                         },
-                                       }}
-                                     >{m.content}</ReactMarkdown>
-                             }
-                           </div>
-                           {m.content && !isLoading && (
-                             <div className="msg-action-row">
-                               <button className="msg-action-btn" onClick={() => copyAiMsg(i, m.content)} title="Copy response" aria-label="Copy response">
-                                 <CopyIcon /><span>{copiedAiIdx === i ? 'Copied!' : 'Copy'}</span>
-                               </button>
-                               <button className="msg-action-btn" onClick={() => handleRegen(i)} title="Regenerate response" aria-label="Regenerate" disabled={isLoading}>
-                                 <ReloadIcon /><span>Retry</span>
-                               </button>
-                               <button className="msg-action-btn" onClick={() => shareAiMsg(m.content)} title="Share response" aria-label="Share">
-                                 <ShareIcon /><span>Share</span>
-                               </button>
-                               <button className={`msg-action-btn${msgFeedback[i] === 'up' ? ' feedback-up' : ''}`} onClick={() => handleFeedback(i, 'up')} title="Like" aria-label="Like response">
-                                 <ThumbsUpIcon />
-                               </button>
-                               <button className={`msg-action-btn${msgFeedback[i] === 'down' ? ' feedback-down' : ''}`} onClick={() => handleFeedback(i, 'down')} title="Dislike" aria-label="Dislike response">
-                                 <ThumbsDnIcon />
-                               </button>
-                             </div>
-                           )}
-                         </div>
-                       )}
+                     <div key={i} className={`msg-bubble ${m.role}`}>
+                       <div className="msg-avatar">
+                         {m.role === "user" ? (userInfo?.name || "U")[0].toUpperCase() : <VetroSpark size={16} color="#000" />}
+                       </div>
+                       <div className="msg-content">
+                         <ReactMarkdown>{m.content}</ReactMarkdown>
+                       </div>
                      </div>
                    ))}
-                   {isLoading && !(messages.length > 0 && messages[messages.length - 1].role === 'assistant') && (
-                     <div className="flex w-full mb-6 justify-start gap-3">
-                       <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #4F7CFF 0%, #8B5CF6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
-                         <VetroSparkWhite size={22} />
-                       </div>
-                       <div style={{ paddingTop: 6, color: "var(--ink-3)" }}>
-                         <div className="flex gap-2 items-center">
-                           <div className="flex gap-1 items-center">
-                             <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)' }}></span>
-                             <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)', animationDelay: '0.15s' }}></span>
-                             <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--ink-3)', animationDelay: '0.3s' }}></span>
-                           </div>
-                           <span style={{ fontSize: 13 }}>{getStatusLabel(streamStatus, selectedMode)}</span>
-                         </div>
-                       </div>
+                   {isLoading && (
+                     <div className="msg-bubble assistant">
+                       <div className="msg-avatar"><VetroSpark size={16} color="#000" /></div>
+                       <div className="msg-content loading-dots">Thinking...</div>
                      </div>
                    )}
-
                    <div ref={messagesEndRef} />
-                   </div>
                  </div>
-                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '60px 24px 20px', background: 'linear-gradient(to top, var(--bg) 55%, transparent)', pointerEvents: 'none' }}>
-                   <div style={{ maxWidth: 720, margin: '0 auto', pointerEvents: 'auto' }}>
-                    {renderInputBox()}
-                  </div>
+                 {showScrollDn && (
+                   <button onClick={scrollToBottom} style={{ position: 'absolute', bottom: 100, left: '50%', transform: 'translateX(-50%)', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 20, padding: '6px 12px', fontSize: '0.85rem', fontWeight: 500, color: 'var(--ink)', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10 }}>
+                     ↓ Jump to latest
+                   </button>
+                 )}
+                 <div className="chat-input-shell">
+                   {renderInputBox()}
                  </div>
-               </div>
-             )}
-        </div>
+               </>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
 }
-

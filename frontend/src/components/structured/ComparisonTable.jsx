@@ -15,8 +15,8 @@ const ComparisonTable = ({ title, options = [], features = [], delay = 0 }) => {
     >
       {title && (
         <div className="comparison-header">
-          <Zap size={20} className="text-amber-500" />
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--structured-text-primary)' }}>{title}</h2>
+          <Zap size={20} style={{ color: 'var(--structured-accent)' }} />
+          <h2 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--structured-text-primary)' }}>{title}</h2>
         </div>
       )}
 
@@ -47,7 +47,7 @@ const ComparisonTable = ({ title, options = [], features = [], delay = 0 }) => {
                   return (
                     <td key={oIdx} className={opt.highlight ? 'highlight-col' : ''}>
                       {typeof val === 'boolean' ? (
-                        val ? <Check size={18} className="text-emerald-500" /> : <X size={18} className="text-rose-500" />
+                        val ? <Check size={18} style={{ color: 'var(--s-success)' }} /> : <X size={18} style={{ color: 'var(--s-danger)' }} />
                       ) : (
                         <span className="feature-value-text">{val || '—'}</span>
                       )}

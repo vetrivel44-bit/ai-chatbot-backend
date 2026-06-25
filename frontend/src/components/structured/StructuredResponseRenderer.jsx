@@ -46,7 +46,6 @@ const extractKnownJsonBlocks = (text) => {
 
 const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
   const [copied, setCopied] = useState(false);
-  if (!response) return null;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(response);
@@ -141,7 +140,6 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
       try {
         const rawContent = block.content.trim();
         const cleanedContent = rawContent
-          .replace(/\/\/.*$/gm, '')
           .replace(/\/\*[\s\S]*?\*\//g, '')
           .replace(/,\s*}/g, '}')
           .replace(/,\s*\]/g, ']');
@@ -236,7 +234,7 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
     // Auto-detecting section headers caused e.g. "## Key Features" to become cards on every answer.
 
     // 6. Remaining text renders as clean markdown.
-    if (remainingText.length > 10) {
+    if (remainingText.length > 0) {
       sections.push({
         type: 'section',
         content: remainingText,
@@ -358,6 +356,8 @@ const StructuredResponseRenderer = ({ response, onSubmitCode }) => {
   };
 
   const sections = useMemo(() => parseResponse(response), [response]);
+
+  if (!response) return null;
 
   return (
     <div className="structured-response-container">

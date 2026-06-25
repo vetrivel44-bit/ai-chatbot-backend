@@ -809,11 +809,16 @@
 }
 
 .comparison-header {
-  padding: 24px 32px;
+  padding: 20px 28px;
+  background: var(--structured-accent-soft);
   border-bottom: 1px solid var(--structured-border);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.comparison-header svg {
+  flex-shrink: 0;
 }
 
 .comparison-table-container {
@@ -828,19 +833,37 @@
 }
 
 .premium-comparison-table th {
-  padding: 24px;
-  background: var(--structured-accent-soft);
+  padding: 18px 24px;
+  background: var(--structured-card);
   color: var(--structured-text-primary);
   font-weight: 700;
   font-size: 0.9rem;
   border-bottom: 2px solid var(--structured-border);
+  vertical-align: bottom;
+}
+
+.premium-comparison-table th:first-child {
+  color: var(--structured-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
 }
 
 .premium-comparison-table td {
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--structured-border);
   color: var(--structured-text-secondary);
   font-size: 0.95rem;
+  text-align: center;
+}
+
+.premium-comparison-table tbody tr:nth-child(odd) td {
+  background: var(--structured-accent-soft);
+}
+
+.premium-comparison-table tbody tr:hover td {
+  background: var(--structured-border);
 }
 
 .premium-comparison-table tr:last-child td {
@@ -848,19 +871,16 @@
 }
 
 .feature-cell {
-  width: 300px;
-  min-width: 250px;
-  background: rgba(0,0,0,0.01);
-}
-
-[data-theme="dark"] .feature-cell {
-  background: rgba(255,255,255,0.01);
+  width: 280px;
+  min-width: 220px;
+  text-align: left;
 }
 
 .feature-label {
   font-weight: 700;
   color: var(--structured-text-primary);
   margin-bottom: 4px;
+  font-size: 0.95rem;
 }
 
 .feature-desc {
@@ -876,22 +896,27 @@
 }
 
 .option-name {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 800;
+  color: var(--structured-text-primary);
 }
 
 .option-badge {
   background: var(--structured-accent);
   color: white;
   font-size: 0.65rem;
-  padding: 2px 8px;
+  font-weight: 700;
+  padding: 3px 10px;
   border-radius: 100px;
   text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .highlight-col {
-  background: var(--structured-accent-soft);
+  background: var(--structured-accent-soft) !important;
   position: relative;
+  box-shadow: inset 1px 0 0 var(--structured-accent), inset -1px 0 0 var(--structured-accent);
 }
 
 .highlight-col::after {
@@ -900,12 +925,13 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 3px;
   background: var(--structured-accent);
 }
 
 .feature-value-text {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--structured-text-secondary);
 }
 
 /* ─── ENHANCED TIMELINE ─── */

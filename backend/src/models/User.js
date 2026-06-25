@@ -30,6 +30,36 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    plan: {
+      type: String,
+      enum: ["free", "pro", "team"],
+      default: "free",
+    },
+    credits: {
+      type: Number,
+      default: 50,
+    },
+    creditsResetAt: {
+      type: Date,
+      default: Date.now,
+    },
+    stripeCustomerId: {
+      type: String,
+      default: null,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["none", "active", "past_due", "canceled"],
+      default: "none",
+    },
+    planRenewsAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },
@@ -41,6 +71,8 @@ const userSchema = new mongoose.Schema(
         delete ret.password;
         delete ret.loginAttempts;
         delete ret.lockUntil;
+        delete ret.stripeCustomerId;
+        delete ret.stripeSubscriptionId;
         return ret;
       },
     },

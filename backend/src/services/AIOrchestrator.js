@@ -2,7 +2,7 @@
 const logger = require("../utils/logger");
 const providerManager = require("./ProviderManager");
 const { performDeepSearch } = require("./deepSearchService");
-const { searchWeb } = require("../controllers/searchController");
+const { searchWeb, searchImages } = require("../controllers/searchController");
 
 class AIOrchestrator {
   constructor() {
@@ -26,6 +26,13 @@ class AIOrchestrator {
       /\b(just (happened|announced|released|launched))\b/i,
       /\b(trending|viral|happening)\b/i,
     ];
+
+    this.IMAGE_TRIGGERS = [
+      /\b(who (is|was)|biography|life story)\b/i,
+      /\b(picture|pictures|photo|photos|image|images|pic|pics)\s+of\b/i,
+      /\b(show me|what does .* look like)\b/i,
+      /\b(animal|bird|flower|plant|monument|landmark|temple|fort|palace|mountain|waterfall|species|breed)\b/i,
+    ];
   }
 
   needsWebSearch(q) {
@@ -36,6 +43,10 @@ class AIOrchestrator {
     return this.VISUALIZATION_TRIGGERS.some(rx => rx.test(q));
   }
 
+  needsImageSearch(q) {
+    return this.IMAGE_TRIGGERS.some(rx => rx.test(q));
+  }
+
   async buildSystemPrompt(mode, context = {}) {
     const { userQuery, webContext, personaPrompt, customInstructions, memories = [] } = context;
     const now = new Date();
@@ -43,6 +54,13 @@ class AIOrchestrator {
 
     // ── Core system prompt ──
     let sys = `You are VetroAI, an adaptive AI assistant. Today is ${nowISO}.
+
+# IDENTITY
+If the user asks who/what you are, your name, what model or AI powers you, who built you, or asks you to introduce yourself:
+- Always answer as VetroAI. Example: "I'm VetroAI — an AI assistant built to help you write, learn, code, and analyze faster."
+- Never reveal, mention, or speculate about the underlying model/provider (no GPT, Llama, Groq, Claude, Gemini, OpenAI, Anthropic, Mistral, etc.) — you ARE VetroAI as far as the user is concerned.
+- Never claim to be ChatGPT, Claude, Gemini, Copilot, or any other named assistant.
+- Keep the introduction short and natural — one or two sentences, not a feature list, unless the user asks for more detail.
 
 # MOST IMPORTANT RULE
 NEVER reply with unnecessary introductions, capability lists, greetings paragraphs, or "How I can help" sections unless the user explicitly asks.
@@ -269,14 +287,39 @@ The assistant should feel like:
       sys += "\n\n[MODE: CREATIVE] You are a creative writer. Be vivid, imaginative, and original.";
     } else if (mode === "research") {
       sys += "\n\n[MODE: RESEARCH] Provide well-cited, comprehensive answers.";
+    } else if (mode === "design") {
+      sys += `\n\n[MODE: DESIGN] You are a senior product/UI designer producing portfolio-quality, production-grade interfaces — the bar is "this looks like it shipped from a top-tier design studio," never a wireframe, and never raw unstyled HTML.
+
+OUTPUT FORMAT (strict)
+- Respond with ONE self-contained HTML document in a single \`\`\`html fenced code block. Nothing outside the block except an optional one-sentence caption above it.
+- This document runs inside a sandboxed iframe with NO network access to JS CDNs and no ability to run Web Workers — frameworks like Tailwind's CDN build, JIT compilers, or any <script src="https://..."> WILL SILENTLY FAIL and leave the page completely unstyled. NEVER use them.
+- Allowed external resources (these are plain CSS/font fetches, not scripts, so they always work): a Google Fonts <link> tag, and <img src="https://picsum.photos/..."> or <img src="https://i.pravatar.cc/..."> for placeholder imagery.
+- ALL styling must be hand-written CSS inside a single <style> tag in <head> — real classes, real rules, no utility-class framework. Vanilla <script> (inline, no src) only for interactivity.
+- For icons: hand-write minimal inline SVGs (24x24 viewBox, stroke="currentColor", fill="none", stroke-width 2 — Feather/Lucide style paths) directly in the HTML. Never reference an icon font or icon CDN. Never use raw emoji as UI chrome.
+- If refining a previous design, output the FULL updated document, not a diff — keep what worked, change only what was asked.
+
+DESIGN STANDARDS (non-negotiable)
+1. Visual hierarchy — one clear focal point per screen; type scale with real contrast (e.g. 12/14/16/20/32/48px steps, not everything at 16px).
+2. Color — a deliberate palette defined as CSS custom properties on :root (1 primary, 1-2 accent, a full neutral gray ramp), not default black-on-white or browser-default blues/purples. Use gradients or tinted backgrounds where it fits the brief.
+3. Spacing & layout — use flexbox/grid with a consistent spacing scale (4/8/12/16/24/32/48/64px) via CSS variables. Every group of items (nav links, buttons, list rows) MUST have explicit gap/margin between them and clear container padding — never let elements or text touch or visually run together.
+4. Depth & polish — soft box-shadows, subtle borders, consistent border-radius scale, :hover/:focus/:active states, transitions (150-300ms) on every interactive element. Real <button> elements get cursor:pointer, padding, and a visible hover state — never bare browser-default buttons.
+5. Typography — import ONE Google Font via <link> for display/headings, pair with a system sans-serif stack for body text; correct font-weights and line-height (1.4-1.6 for body, 1.1-1.3 for headings).
+6. Real content — write believable copy, names, numbers, and placeholder imagery instead of "Lorem ipsum" or "Button 1". Multiple distinct labels/items must NEVER be concatenated into one run-on text string — each is its own element.
+7. Responsive — use relative units, flex-wrap, and a couple of @media breakpoints (e.g. max-width: 640px) instead of fixed pixel widths everywhere.
+8. Micro-interactions — hover states, button press feedback (active:scale or similar), smooth scrolling, small CSS entrance animations where they add polish without being gratuitous.
+9. Structure semantic HTML (header/nav/main/section/footer), not div soup.
+
+Before finishing, mentally check: every class referenced in the HTML has a matching rule in <style>; nothing relies on an external script to render correctly. Think like you're building a Dribbble-shot, not a Bootstrap starter template. Default to dark, moody, premium aesthetics with vivid accent colors unless the brief calls for something else.`;
     }
 
     // Web context
     if (webContext) {
-      sys += `\n\nLIVE SEARCH RESULTS (use these to give accurate, up-to-date answers):\n${webContext}\nBase your answer on these results. Cite URLs where relevant.`;
+      sys += `\n\nLIVE SEARCH RESULTS (use these to give accurate, up-to-date answers):\n${webContext}\nBase your answer on these results when they're actually relevant to the user's question, and cite URLs where relevant. If the results are irrelevant (e.g. the user asked about your own identity, or the results are about an unrelated topic), ignore them entirely and answer normally per the IDENTITY rules above — never force unrelated search results into your reply.`;
     }
 
-    // ─── VISUALIZATION INTENT LAYER ───
+    // ─── VISUALIZATION INTENT LAYER ─── (irrelevant noise for design mode — it conflicts with
+    // the "ONE html code block only" rule and dilutes the model's attention away from styling)
+    if (mode !== "design") {
     sys += `\n\n### RICH VISUALIZATION INTENT SYSTEM
 You are equipped with a dynamic visualization rendering system. When responding to comparisons, trends, analytics, rankings, geographical queries, statistics, timelines, process milestones, system architectures, or technical details, you MUST output the appropriate structured JSON block inside your response. Never return only plain text or standard markdown tables when these premium visual components would improve user understanding. You may mix markdown text before and after the blocks.
 
@@ -410,6 +453,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
   "content": "server {\\n  listen 80;\\n  server_name localhost;\\n}"
 }
 \`\`\``;
+    }
 
     return sys;
   }
@@ -423,14 +467,30 @@ Choose the single best-fitting visualization block(s) from the formats below:
     const maxAttempts = 3;
     let success = false;
 
+    this.sendVetroEvent(res, "status", "Analyzing your request...");
+
     // Intent detection — also support explicit webSearch flag from frontend
     const isGreeting = /^\s*(hi|hello|hey|greetings|good morning|good afternoon|good evening|yo)[.,!?\s]*$/i.test(userQuery);
-    const shouldSearch = !isGreeting && (
-      mode === "web_search" || mode === "deep_search" || mode === "research" ||
-      params.webSearch === true || params.webSearch === "true" ||
-      this.needsWebSearch(userQuery)
+    const isIdentityQuestion = /\b(who are you|what are you|your name|introduce yourself|tell me about yourself|what model|which (ai|model|llm)|who (made|built|created|trained|developed) you|are you (chatgpt|gpt|gemini|claude|llama|bard|human|real|a bot|an ai))\b/i.test(userQuery.trim());
+    // Explicit search-oriented modes always search. The generic "auto web search" flag from the
+    // frontend is just permission, not a mandate — it only fires when the query itself looks like
+    // it needs live info, otherwise short/conversational messages (e.g. "your name") were being
+    // searched literally and returning unrelated results (movie/song titles, etc.).
+    const isExplicitSearchMode = mode === "web_search" || mode === "deep_search" || mode === "research";
+    const autoSearchRequested = params.webSearch === true || params.webSearch === "true";
+    const shouldSearch = !isGreeting && !isIdentityQuestion && (
+      isExplicitSearchMode ||
+      (autoSearchRequested && this.needsWebSearch(userQuery))
     );
     let webContext = null;
+
+    // Kick off image lookup in parallel with everything else — only for modes where
+    // an inline gallery makes sense (skip design/code/data-analysis style modes).
+    const galleryEligibleMode = !["design", "code_exec", "data_analysis"].includes(mode);
+    const shouldFetchImages = galleryEligibleMode && !isGreeting && !isIdentityQuestion && this.needsImageSearch(userQuery);
+    const imagesPromise = shouldFetchImages
+      ? searchImages(userQuery, 4).catch(() => [])
+      : Promise.resolve([]);
 
     if (shouldSearch) {
       this.sendVetroEvent(res, "status", "Searching the web for latest info...");
@@ -486,7 +546,15 @@ Choose the single best-fitting visualization block(s) from the formats below:
 
         // Handle stream
         await this.pipeStream(stream, res, currentProviderName);
-        
+
+        // Append a real-image gallery if this query warranted one — fetched in parallel
+        // above, so it's typically already resolved by the time the text stream finishes.
+        const images = await imagesPromise;
+        if (images.length > 0) {
+          const galleryBlock = `\n\n\`\`\`json\n${JSON.stringify({ type: "visual_gallery", query: userQuery, images })}\n\`\`\``;
+          this.sendVetroEvent(res, "content", galleryBlock);
+        }
+
         providerManager.updateMetrics(currentProviderName, true, Date.now() - startTime);
         success = true;
       } catch (err) {

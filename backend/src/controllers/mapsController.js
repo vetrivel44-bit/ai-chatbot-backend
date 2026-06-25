@@ -1,5 +1,6 @@
 const ApiError = require("../utils/apiError");
 const { config } = require("../config/env");
+const { searchImages } = require("./searchController");
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || "";
 const USE_GOOGLE = Boolean(GOOGLE_MAPS_API_KEY);
@@ -224,4 +225,11 @@ const getDirections = async (req, res) => {
   });
 };
 
-module.exports = { searchPlaces, placeDetails, getDirections };
+const getMapImages = async (req, res) => {
+  const query = ensureValidQuery(req.query.query || req.query.text);
+  if (!query) throw new ApiError(400, "Query is required for map image search.");
+  const images = await searchImages(`${query} map`, 4);
+  return res.json({ success: true, data: images });
+};
+
+module.exports = { searchPlaces, placeDetails, getDirections, getMapImages };

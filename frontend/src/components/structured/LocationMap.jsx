@@ -5,6 +5,7 @@ import { Compass, Navigation, Loader2, MapPin, ArrowRight, ExternalLink } from '
 import { motion } from 'framer-motion';
 import 'leaflet/dist/leaflet.css';
 import '../../styles/StructuredResponse.css';
+import ImageGallery from './ImageGallery';
 
 // Fix for default marker icons in Leaflet with Vite
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -70,6 +71,7 @@ const LocationMap = ({
   });
 
   const [mapType, setMapType] = useState('street'); // 'street' or 'satellite'
+  const [mapImages, setMapImages] = useState([]);
 
   // Use a ref to track the last processed parameters to prevent redundant fetching
   const lastParamsRef = React.useRef("");
@@ -198,6 +200,21 @@ const LocationMap = ({
     };
   }, [place, coordinates, points, origin, destination, waypoints, isRoute]);
 
+  useEffect(() => {
+    const imageQuery = isRoute ? `${origin} to ${destination}` : place;
+    if (!imageQuery) return;
+
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    fetch(`/api/maps/images?query=${encodeURIComponent(imageQuery)}`, { signal: abortController.signal })
+      .then((res) => res.json())
+      .then((d) => { if (isMounted && d?.success) setMapImages(d.data || []); })
+      .catch(() => {});
+
+    return () => { isMounted = false; abortController.abort(); };
+  }, [place, origin, destination, isRoute]);
+
   const bounds = mapData.markers.length > 1 
     ? L.latLngBounds(mapData.markers.map(m => [m.lat, m.lng])) 
     : (mapData.markers.length === 1 ? L.latLngBounds([[mapData.markers[0].lat, mapData.markers[0].lng]]) : null);
@@ -247,6 +264,10 @@ const LocationMap = ({
         )}
       </div>
 
+      {mapImages.length > 0 && (
+        <ImageGallery query={isRoute ? `${origin} → ${destination}` : place} images={mapImages} delay={delay + 0.1} />
+      )}
+
       <div className="map-wrapper">
         <div style={{ height: '400px', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--structured-border)', position: 'relative' }}>
           <MapContainer 
@@ -260,8 +281,10 @@ const LocationMap = ({
             {/* Legal Open-Source Tiles (OpenStreetMap & Esri) */}
             {mapType === 'street' ? (
               <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                subdomains="abcd"
+                maxZoom={20}
               />
             ) : (
               <TileLayer
@@ -282,16 +305,32 @@ const LocationMap = ({
           </MapContainer>
 
           {/* Map Controls */}
-          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <button 
+          <div style={{
+            position: 'absolute', top: 10, right: 10, zIndex: 1000,
+            display: 'flex', gap: 2, padding: 3,
+            background: 'rgba(20,20,24,0.75)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+          }}>
+            <button
               className={`map-type-btn ${mapType === 'street' ? 'active' : ''}`}
               onClick={() => setMapType('street')}
-              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'street' ? '#4285F4' : '#fff', color: mapType === 'street' ? '#fff' : '#333', cursor: 'pointer', fontWeight: 600 }}
+              style={{
+                padding: '6px 12px', fontSize: '11px', borderRadius: 6, border: 'none',
+                background: mapType === 'street' ? '#4285F4' : 'transparent',
+                color: mapType === 'street' ? '#fff' : 'rgba(255,255,255,0.65)',
+                cursor: 'pointer', fontWeight: 600, transition: 'all 0.15s ease'
+              }}
             >Map</button>
-            <button 
+            <button
               className={`map-type-btn ${mapType === 'satellite' ? 'active' : ''}`}
               onClick={() => setMapType('satellite')}
-              style={{ padding: '6px 10px', fontSize: '10px', borderRadius: '4px', border: '1px solid #ccc', background: mapType === 'satellite' ? '#4285F4' : '#fff', color: mapType === 'satellite' ? '#fff' : '#333', cursor: 'pointer', fontWeight: 600 }}
+              style={{
+                padding: '6px 12px', fontSize: '11px', borderRadius: 6, border: 'none',
+                background: mapType === 'satellite' ? '#4285F4' : 'transparent',
+                color: mapType === 'satellite' ? '#fff' : 'rgba(255,255,255,0.65)',
+                cursor: 'pointer', fontWeight: 600, transition: 'all 0.15s ease'
+              }}
             >Satellite</button>
           </div>
         </div>

@@ -32,6 +32,23 @@ const MODEL_ALIASES = {
 
 const aiGateway = require("../services/AIGateway");
 const providerManager = require("../services/ProviderManager");
+const creditService = require("../services/creditService");
+const { verifyAccessToken } = require("../utils/token");
+
+// Best-effort: resolves a Mongo user id from the bearer token if one is present.
+// Never throws — chat must keep working for offline/local-mode users with no DB account.
+function resolveBillingUserId(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token || token.startsWith("local_")) return null;
+  try {
+    const decoded = verifyAccessToken(token);
+    return decoded?.userId || null;
+  } catch {
+    return null;
+  }
+}
 
 const SAFE_PATTERNS = [
   /ignore (all|previous|prior) instructions/gi,
@@ -183,12 +200,24 @@ async function chat(req, res) {
 
   if (!messages.length) throw new ApiError(400, "No valid messages provided");
 
+  // Only meaningful once a DB-backed account exists (MONGO_URI set); offline/local
+  // users always pass through with billingUserId === null.
+  const billingUserId = resolveBillingUserId(req);
+
   // Set up SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no"); // Important for streaming proxies
   res.flushHeaders?.();
+
+  if (billingUserId && creditService.isDbAvailable()) {
+    const status = await creditService.getBillingStatus(billingUserId);
+    if (status && status.plan === "free" && typeof status.credits === "number" && status.credits <= 0) {
+      res.write(`data: ${JSON.stringify({ type: "error", data: "You've used all your free credits for this period. Upgrade your plan to keep chatting.", code: "INSUFFICIENT_CREDITS" })}\n\n`);
+      return res.end();
+    }
+  }
 
   const heartbeat = setInterval(() => { res.write(": ping\n\n"); }, 12000);
   const cleanup = () => { clearInterval(heartbeat); };
@@ -211,6 +240,9 @@ async function chat(req, res) {
     }
   } finally {
     cleanup();
+    if (billingUserId) {
+      creditService.consumeCredit(billingUserId, 1, "chat_message", { reqId, mode, provider }).catch(() => {});
+    }
     res.end();
   }
 }

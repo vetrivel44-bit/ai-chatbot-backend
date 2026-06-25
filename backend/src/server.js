@@ -4,9 +4,7 @@ require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const app = require("./app");
 const { config } = require("./config/env");
 const logger = require("./utils/logger");
-
-// ── No MongoDB ───────────────────────────────────────────────────────────
-// Removed MongoDB connection for offline mode
+const connectDatabase = require("./config/db");
 
 async function bootstrap() {
   // Validate only non-DB required envs (skip GROQ_API_KEY / MONGO_URI if missing)
@@ -18,23 +16,27 @@ async function bootstrap() {
     if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = "vetroai_dev_refresh_fallback_2024";
   }
 
-  // MongoDB is removed — running in offline mode
-  // if (connectDatabase) {
-  //   try {
-  //     await connectDatabase();
-  //     logger.info("server.db_connected");
-  //   } catch (err) {
-  //     logger.info("server.db_skipped", { message: err.message, note: "Running without MongoDB — offline auth mode active" });
-  //   }
-  // }
+  // MongoDB is optional — without MONGO_URI the app still runs in offline/in-memory
+  // auth mode, but billing/credits/plans require a real DB to persist.
+  let dbConnected = false;
+  if (config.mongoUri) {
+    try {
+      await connectDatabase();
+      dbConnected = true;
+    } catch (err) {
+      logger.info("server.db_skipped", { message: err.message, note: "Running without MongoDB — offline auth mode active" });
+    }
+  } else {
+    logger.info("server.db_skipped", { note: "MONGO_URI not set — running in offline mode (billing/persistent accounts disabled)" });
+  }
 
   app.listen(config.port, "0.0.0.0", () => {
     logger.info("server.started", {
       port: config.port,
       env: config.nodeEnv,
       groqKey: process.env.GROQ_API_KEY ? "✅ configured" : "⚠️ missing",
-
-      mongodb: "removed (offline mode)",
+      stripeKey: process.env.STRIPE_SECRET_KEY ? "✅ configured" : "⚠️ missing",
+      mongodb: dbConnected ? "connected" : "offline mode",
     });
   });
 }

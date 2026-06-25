@@ -17,7 +17,7 @@ async function generateStream(messages, options = {}) {
       model: model || config.groqModel || "llama-3.1-8b-instant",
       messages,
       temperature: temperature ?? 0.7,
-      max_tokens: Math.min(maxTokens ?? 1024, 1024), // cap for free tier rate limits
+      max_tokens: Math.min(maxTokens ?? 1024, 8192), // cap for free tier rate limits
       stream: true,
     });
 

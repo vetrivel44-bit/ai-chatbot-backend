@@ -15,7 +15,8 @@ module.exports = {
   config: {
     nodeEnv:             getEnv("NODE_ENV",              "development"),
     port:                Number(getEnv("PORT",           "3000")),
-    // mongoUri:            getEnv("MONGO_URI",             "mongodb://127.0.0.1:27017/vetroai_auth"),
+    mongoUri:            getEnv("MONGO_URI",             ""),
+    frontendUrl:         getEnv("FRONTEND_URL",          "http://localhost:5174"),
     jwtSecret:           getEnv("JWT_SECRET",            "vetroai_dev_secret_fallback_2024"),
     jwtRefreshSecret:    getEnv("JWT_REFRESH_SECRET",    "vetroai_dev_refresh_fallback_2024"),
     jwtAccessExpiresIn:  getEnv("JWT_ACCESS_EXPIRES_IN", "15m"),
@@ -44,5 +45,10 @@ module.exports = {
     twilioFromNumber:    getEnv("TWILIO_FROM_NUMBER",    ""),
     bookingNotificationPhones: getEnv("BOOKING_NOTIFICATION_PHONES", "8778508652,9994777865"),
     tavilyApiKey:        getEnv("TAVILY_API_KEY",         ""),
+    stripeSecretKey:        getEnv("STRIPE_SECRET_KEY",        ""),
+    stripePublishableKey:   getEnv("STRIPE_PUBLISHABLE_KEY",   ""),
+    stripeWebhookSecret:    getEnv("STRIPE_WEBHOOK_SECRET",    ""),
+    stripePriceProMonthly:  getEnv("STRIPE_PRICE_PRO_MONTHLY", ""),
+    stripePriceTeamMonthly: getEnv("STRIPE_PRICE_TEAM_MONTHLY",""),
   },
 };
