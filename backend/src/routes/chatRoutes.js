@@ -5,6 +5,8 @@ const asyncHandler = require("../middleware/asyncHandler");
 const { chatLimiter } = require("../middleware/rateLimiters");
 const chatController = require("../controllers/chatController");
 const searchController = require("../controllers/searchController");
+const imageController = require("../controllers/imageController");
+const videoController = require("../controllers/videoController");
 
 const router = express.Router();
 const upload = multer({
@@ -21,5 +23,8 @@ router.post("/chat", chatLimiter, upload.single("file"), asyncHandler(chatContro
 router.post("/generate-title", chatLimiter, asyncHandler(chatController.generateTitle));
 router.post("/follow-ups", chatLimiter, asyncHandler(chatController.followUps));
 router.post("/search", chatLimiter, asyncHandler(searchController.performSearch));
+router.post("/generate-image", chatLimiter, asyncHandler(imageController.generateImage));
+router.post("/generate-video", chatLimiter, asyncHandler(videoController.generateVideo));
+router.get("/video-status/:videoId", asyncHandler(videoController.checkVideoStatus));
 
 module.exports = router;

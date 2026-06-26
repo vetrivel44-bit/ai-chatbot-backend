@@ -68,7 +68,7 @@ function normalizeModel(inputModel, provider) {
     gemini: "gemini-2.0-flash-exp",
     mistral: "mistral-small-latest",
     sambanova: "Meta-Llama-3.3-70B-Instruct",
-    openrouter: "meta-llama/llama-3.3-70b-instruct"
+    agnes: "agnes-2.0-flash"
   };
   
   const fallback = fallbackMap[provider?.toLowerCase()] || "llama-3.3-70b-versatile";

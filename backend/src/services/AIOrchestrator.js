@@ -27,11 +27,15 @@ class AIOrchestrator {
       /\b(trending|viral|happening)\b/i,
     ];
 
+    // Deliberately narrow: only fires when the user is clearly asking to SEE something
+    // specific (a named person/place/thing), not for general explanatory questions that
+    // merely mention a noun like "temple" or "animal" in passing.
     this.IMAGE_TRIGGERS = [
-      /\b(who (is|was)|biography|life story)\b/i,
+      /^\s*who (is|was)\b/i,
+      /\b(biography|life story) of\b/i,
       /\b(picture|pictures|photo|photos|image|images|pic|pics)\s+of\b/i,
-      /\b(show me|what does .* look like)\b/i,
-      /\b(animal|bird|flower|plant|monument|landmark|temple|fort|palace|mountain|waterfall|species|breed)\b/i,
+      /\bshow me (a |an |the )?(picture|pictures|photo|photos|image|images)\b/i,
+      /\bwhat does .{2,60} look like\b/i,
     ];
   }
 
@@ -668,7 +672,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
           stream.on("error", reject);
         });
       }
-      // 3. Handle Web Streams with getReader (OpenRouter uses this)
+      // 3. Handle Web Streams with getReader (Agnes uses this)
       else if (stream.getReader && typeof stream.getReader === "function") {
         const reader = stream.getReader();
         try {
@@ -794,7 +798,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
     }
 
     // If using SSE provider, ignore comments or heartbeats that don't contain "data: "
-    if (provider === "groq" || provider === "mistral" || provider === "sambanova" || provider === "openrouter") {
+    if (provider === "groq" || provider === "mistral" || provider === "sambanova" || provider === "agnes") {
       return null;
     }
 

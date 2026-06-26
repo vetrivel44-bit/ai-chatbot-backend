@@ -50,12 +50,16 @@ const authMiddleware = asyncHandler(async (req, _res, next) => {
     throw err;
   }
 
-  const user = await User.findById(decoded.userId).select("-password");
-  if (!user) {
-    throw new ApiError(401, "User not found for token");
+  try {
+    const user = await User.findById(decoded.userId).select("-password");
+    if (!user) {
+      throw new ApiError(401, "User not found for token");
+    }
+    req.user = user;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    req.user = { id: decoded.userId, _id: decoded.userId, name: "User", email: "", isOffline: true };
   }
-
-  req.user = user;
   next();
 });
 

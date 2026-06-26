@@ -3,7 +3,7 @@ const groqAdapter = require("../providers/groqAdapter");
 const geminiAdapter = require("../providers/geminiAdapter");
 const mistralAdapter = require("../providers/mistralAdapter");
 const sambanovaAdapter = require("../providers/sambanovaAdapter");
-const openrouterAdapter = require("../providers/openrouterAdapter");
+const agnesAdapter = require("../providers/agnesAdapter");
 
 class ProviderManager {
   constructor() {
@@ -18,7 +18,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["openrouter", "mistral", "sambanova", "gemini"],
+        fallbacks: ["agnes", "mistral", "sambanova", "gemini"],
       },
       mistral: {
         adapter: mistralAdapter,
@@ -30,10 +30,10 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "sambanova", "openrouter", "gemini"],
+        fallbacks: ["groq", "sambanova", "agnes", "gemini"],
       },
-      openrouter: {
-        adapter: openrouterAdapter,
+      agnes: {
+        adapter: agnesAdapter,
         weight: 100,
         score: 100,
         latency: 0,
@@ -54,7 +54,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "mistral", "openrouter", "gemini"],
+        fallbacks: ["groq", "mistral", "agnes", "gemini"],
       },
       gemini: {
         adapter: geminiAdapter,
@@ -66,7 +66,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "mistral", "openrouter", "sambanova"],
+        fallbacks: ["groq", "mistral", "agnes", "sambanova"],
       },
     };
 
@@ -150,7 +150,7 @@ class ProviderManager {
 
   getFallbackProvider(failedProvider) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "groq", "openrouter"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "groq", "agnes"];
 
     // Auto-expire cooled-down suspensions first
     for (const [, prov] of Object.entries(this.providers)) {
