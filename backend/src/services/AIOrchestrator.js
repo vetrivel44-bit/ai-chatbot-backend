@@ -3,6 +3,9 @@ const logger = require("../utils/logger");
 const providerManager = require("./ProviderManager");
 const { performDeepSearch } = require("./deepSearchService");
 const { searchWeb, searchImages } = require("../controllers/searchController");
+const { getAstrologyData, extractBirthDetails } = require("./astrologyService");
+const { config } = require("../config/env");
+const Groq = require("groq-sdk");
 
 class AIOrchestrator {
   constructor() {
@@ -36,6 +39,10 @@ class AIOrchestrator {
       /\b(picture|pictures|photo|photos|image|images|pic|pics)\s+of\b/i,
       /\bshow me (a |an |the )?(picture|pictures|photo|photos|image|images)\b/i,
       /\bwhat does .{2,60} look like\b/i,
+    ];
+
+    this.ASTROLOGY_TRIGGERS = [
+      /\b(horoscope|astrology|natal chart|birth chart|zodiac sign|sun sign|moon sign|rising sign|kundli|astrological)\b/i
     ];
   }
 
@@ -487,6 +494,29 @@ Choose the single best-fitting visualization block(s) from the formats below:
       (autoSearchRequested && this.needsWebSearch(userQuery))
     );
     let webContext = null;
+    let astroContext = null;
+
+    const isAstrology = this.ASTROLOGY_TRIGGERS.some(rx => rx.test(userQuery));
+    if (isAstrology) {
+      this.sendVetroEvent(res, "status", "Consulting astrological charts...");
+      try {
+        const groq = config.groqApiKey ? new Groq({ apiKey: config.groqApiKey }) : null;
+        const birthDetails = await extractBirthDetails(messages, groq);
+        if (birthDetails) {
+          const astroData = await getAstrologyData(birthDetails);
+          if (astroData) {
+            astroContext = JSON.stringify(astroData);
+          } else {
+            astroContext = "API_ERROR";
+          }
+        } else {
+          astroContext = "USER_BIRTH_DETAILS_MISSING";
+        }
+      } catch (err) {
+        astroContext = "API_ERROR";
+        logger.error("AIOrchestrator.astrologyError", { reqId, error: err.message });
+      }
+    }
 
     // Kick off image lookup in parallel with everything else — only for modes where
     // an inline gallery makes sense (skip design/code/data-analysis style modes).
@@ -511,10 +541,18 @@ Choose the single best-fitting visualization block(s) from the formats below:
     }
 
     const sysPrompt = await this.buildSystemPrompt(mode, { userQuery, webContext, memories, customInstructions: params.systemPrompt });
+    if (astroContext === "USER_BIRTH_DETAILS_MISSING") {
+      finalSysPrompt += `\n\n[ASTROLOGY REQUEST DETECTED]\nThe user is asking about astrology. To provide highly accurate, personalized readings using our FreeAstroAPI integration, you MUST politely ask the user for their birth date (year, month, day), time of birth (hour, minute), and city of birth. Do not make up a horoscope without this data.`;
+    } else if (astroContext === "API_ERROR") {
+      finalSysPrompt += `\n\n[ASTROLOGY API ERROR]\nAn error occurred while fetching data from FreeAstroAPI (timeout or rate limit). Do NOT hallucinate a chart or guess their sign. Politely inform the user that the astrology server is currently unavailable and ask them to try again in a few moments.`;
+    } else if (astroContext) {
+      finalSysPrompt += `\n\n[LIVE ASTROLOGY API DATA]\nBased on the user's birth details, here is their highly accurate astrological data retrieved directly from FreeAstroAPI:\n${astroContext}\n\nCRITICAL ASTROLOGY RULES:\n1. ONLY use this exact fetched data. Do not guess or estimate. Provide exact mathematical degrees (e.g., 18°43').\n2. Clearly state: Vedic Sidereal system, Lahiri Ayanamsa, and Whole Sign houses.\n3. Format your response strictly using this Markdown template:\n\n### Chart Details\n* **System:** Vedic Sidereal (Lahiri Ayanamsa)\n* **Ascendant:** [Sign] at [Degree]\n* **Moon Sign:** [Sign] at [Degree] (Nakshatra: [Name], Pada: [Number])\n* **Sun Sign:** [Sign] at [Degree]\n\n### Planetary Placements\n* **[Planet]:** [Sign] at [Degree] in House [Number] [List Retrograde if true]\n(List all planets provided in the JSON)\n\n### Current Dasha Period\n* **Mahadasha:** [Lord]\n* **Antardasha:** [Lord] (Start to End dates)\n\n### Vedic Interpretation\n(Provide a grounded interpretation of these specific placements based on traditional Vedic astrology. Do not use generic statements or deterministic fortunes.)\n\nFollow this structure exactly.`;
+    }
+
     console.log(`[ORCHESTRATOR DEBUG] User Query: "${userQuery}"`);
     console.log(`[ORCHESTRATOR DEBUG] Frontend custom systemPrompt: "${params.systemPrompt || ''}"`);
-    console.log(`[ORCHESTRATOR DEBUG] Generated System Prompt (first 600 chars):\n${sysPrompt.slice(0, 600)}\n...`);
-    let fullMessages = [{ role: "system", content: sysPrompt }, ...messages.slice(-10)];
+    console.log(`[ORCHESTRATOR DEBUG] Generated System Prompt (first 600 chars):\n${finalSysPrompt.slice(0, 600)}\n...`);
+    let fullMessages = [{ role: "system", content: finalSysPrompt }, ...messages.slice(-10)];
     // Prevent empty assistant messages (Mistral error)
     fullMessages = fullMessages.filter(m => {
       if (m.role === "assistant" && !m.content && (!m.tool_calls || m.tool_calls.length === 0)) return false;

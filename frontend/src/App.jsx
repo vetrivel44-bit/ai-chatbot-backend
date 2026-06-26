@@ -2420,7 +2420,14 @@ function NewsPanel({ onClose }) {
 
   const timeAgo = (dateStr) => {
     if (!dateStr) return "";
-    const diff = Date.now() - new Date(dateStr).getTime();
+    // The API returns pubDate in UTC without a Z (e.g. "2026-06-26 07:30:00")
+    // Replace space with T and append Z so it parses correctly in local time
+    const utcStr = dateStr.includes("Z") ? dateStr : dateStr.replace(" ", "T") + "Z";
+    const diff = Date.now() - new Date(utcStr).getTime();
+    
+    // If diff is negative (due to clock skew or future dates), just say "Just now"
+    if (diff < 0) return "Just now";
+    
     const mins = Math.floor(diff / 60000);
     if (mins < 60) return `${mins}m`;
     const hrs = Math.floor(mins / 60);
