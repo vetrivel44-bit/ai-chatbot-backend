@@ -577,7 +577,7 @@ const MODES_LIST = [
   { id: "normal", name: "Normal Chat", icon: "Bot", desc: "General conversation and assistant" },
   { id: "deep_search", name: "DeepSearch", icon: "Brain", desc: "Multi-query research with citations" },
   { id: "analyst", name: "Data Analysis", icon: "Calculator", desc: "Deep data analysis and structured reports" },
-  { id: "multi_ai", name: "Multi-AI", icon: "Zap", desc: "4 AI models compete — best answer wins" },
+  { id: "multi_ai", name: "Multi-AI", icon: "Zap", desc: "5 AI models + Web Search — best answer wins" },
   { id: "debugger", name: "Code", icon: "Terminal", desc: "Expert code analysis and debugging" },
   { id: "summarize", name: "Summarize", icon: "FileText", desc: "Docs and long text synthesis" },
 ];
@@ -3236,10 +3236,12 @@ export default function App() {
   };
 
   const MULTI_AI_MODELS = [
-    { name: "Agnes 2.0", id: "agnes",    color: "#3b82f6", icon: "bolt" },
-    { name: "Mistral",   id: "mistral",  color: "#f97316", icon: "wind" },
-    { name: "Groq",      id: "groq",     color: "#10b981", icon: "zap" },
-    { name: "Gemini",    id: "gemini",   color: "#8b5cf6", icon: "sparkle" },
+    { name: "Agnes 2.0",  id: "agnes",     color: "#3b82f6" },
+    { name: "Mistral",    id: "mistral",   color: "#f97316" },
+    { name: "Groq",       id: "groq",      color: "#10b981" },
+    { name: "Gemini",     id: "gemini",    color: "#8b5cf6" },
+    { name: "SambaNova",  id: "sambanova", color: "#ec4899" },
+    { name: "Web Search", id: "_web",      color: "#06b6d4", isWeb: true },
   ];
 
   const handleMultiAI = async (hist, baseFd, userQuery, isFirstMsg, ctrl, isActive, reqId) => {
@@ -3286,6 +3288,7 @@ export default function App() {
       for (let [k, v] of baseFd.entries()) fd.append(k, v);
       fd.set("provider", provider);
       fd.set("mode", "normal");
+      fd.set("webSearch", "false");
       const t0 = Date.now();
       updateModel(idx, "", "streaming", { startTime: t0 });
       try {
@@ -3307,40 +3310,72 @@ export default function App() {
       }
     };
 
-    // Phase 1: Query all models in parallel
+    const runWebSearch = async (idx) => {
+      const fd = new FormData();
+      for (let [k, v] of baseFd.entries()) fd.append(k, v);
+      fd.set("provider", "agnes");
+      fd.set("mode", "normal");
+      fd.set("webSearch", "true");
+      const t0 = Date.now();
+      updateModel(idx, "", "streaming", { startTime: t0 });
+      try {
+        const res = await fetch(API + "/chat", { method: "POST", body: fd, signal: ctrl.signal });
+        if (!res.ok) throw new Error("Failed");
+        const reader = res.body.getReader();
+        const bot = await readSSEStream(
+          reader,
+          (acc) => { updateModel(idx, acc); if (!isScrolling.current) scrollToBottom(); },
+          () => {}, () => {}, isActive, reqId
+        );
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        updateModel(idx, bot, "done", { endTime: Date.now(), elapsed });
+        return { provider: "web_search", content: bot, elapsed };
+      } catch (err) {
+        if (err.name === "AbortError") return { provider: "web_search", content: "", elapsed: "0" };
+        updateModel(idx, "", "error", { endTime: Date.now() });
+        return { provider: "web_search", content: "", error: true };
+      }
+    };
+
+    // Phase 1: Query all 5 AI models + web search in parallel
     const results = await Promise.all(
-      MULTI_AI_MODELS.map((m, i) => runModel(m.id, i))
+      MULTI_AI_MODELS.map((m, i) => m.isWeb ? runWebSearch(i) : runModel(m.id, i))
     );
 
     if (!isActive()) return;
 
-    // Phase 2: Synthesize best answer
+    // Phase 2: Synthesize best answer from all sources
     updateMultiMsg(last => { last.phase = "synthesizing"; last.consensus = "generating"; });
 
     const validResults = results.filter(r => r.content && !r.error);
-    const responseSummary = validResults.map((r, i) =>
-      `[${r.provider.toUpperCase()} — ${r.elapsed}s]\n${r.content.slice(0, 3000)}`
+    const responseSummary = validResults.map((r) =>
+      `[${r.provider.toUpperCase()} — ${r.elapsed}s]\n${r.content.slice(0, 4000)}`
     ).join("\n\n---\n\n");
 
     const consensusFd = new FormData();
-    consensusFd.append("input", `You are the chief synthesizer in a multi-AI council. ${validResults.length} AI models have answered the user's question independently. Your job is to produce the SINGLE BEST answer by:
+    consensusFd.append("input", `You are the chief synthesizer in VetroAI's multi-AI council. ${validResults.length} sources (5 AI models + live web search) have independently answered the user's question. Your job is to produce the SINGLE DEFINITIVE answer.
 
-1. Identifying the strongest, most accurate points from each model
-2. Resolving any contradictions by picking the most well-reasoned version
-3. Adding structure and clarity that individual responses may lack
-4. Keeping the tone natural — this should read as one polished answer, not a comparison
+INSTRUCTIONS:
+1. Read ALL source responses carefully. Extract the strongest, most accurate, and most detailed points from each.
+2. If sources contradict each other, pick the most well-reasoned and well-sourced version.
+3. If the web search provides real-time data (dates, prices, scores, stats), incorporate it as factual ground truth.
+4. Structure your answer with clear headings, bullet points, and sections where appropriate.
+5. Be THOROUGH and COMPREHENSIVE — this is the premium multi-AI experience. Write a detailed, well-structured answer that covers all important aspects. Aim for depth, not brevity.
+6. Include relevant examples, numbers, and specifics. Don't be vague.
+7. If sources provide URLs or citations, include the most relevant ones.
+8. Do NOT mention the individual AI models or say "according to Model X". Write as one authoritative voice.
 
 USER QUESTION: "${userQuery}"
 
-MODEL RESPONSES:
+SOURCE RESPONSES:
 ${responseSummary}
 
-Write the definitive answer. Be comprehensive but concise. Do NOT mention or compare the models — just give the best answer. Use markdown formatting for readability.`);
+Write the definitive, comprehensive answer with proper markdown formatting (headers, bold, lists, etc.).`);
     consensusFd.append("messages", JSON.stringify([{ role: "user", content: "Synthesize the best answer." }]));
     consensusFd.append("mode", "normal");
     consensusFd.append("provider", "agnes");
-    consensusFd.append("temperature", "0.4");
-    consensusFd.append("maxTokens", "4000");
+    consensusFd.append("temperature", "0.3");
+    consensusFd.append("maxTokens", "8000");
 
     try {
       const cRes = await fetch(API + "/chat", { method: "POST", body: consensusFd, signal: ctrl.signal });
@@ -4476,9 +4511,9 @@ Write the definitive answer. Be comprehensive but concise. Do NOT mention or com
                                         <div className="mai-phase-fill" style={{ width: isComplete ? '100%' : isSynthesizing ? '75%' : `${(doneCount / totalCount) * 60}%` }} />
                                       </div>
                                       <span className="mai-phase-label">
-                                        {isComplete ? <><Check size={12} /> Complete — {totalCount} models consulted</>
-                                          : isSynthesizing ? <><Brain size={12} className="animate-pulse" /> Synthesizing best answer…</>
-                                          : <><Zap size={12} /> Querying {totalCount} AI models… ({doneCount}/{totalCount})</>}
+                                        {isComplete ? <><Check size={12} /> Complete — 5 AI models + Web consulted</>
+                                          : isSynthesizing ? <><Brain size={12} className="animate-pulse" /> Synthesizing best answer from all sources…</>
+                                          : <><Zap size={12} /> Querying 5 AI + Web… ({doneCount}/{totalCount})</>}
                                       </span>
                                     </div>
 
@@ -4503,14 +4538,14 @@ Write the definitive answer. Be comprehensive but concise. Do NOT mention or com
                                           <div className="mai-best-badge">
                                             <div className="mai-best-icon"><VetroSparkWhite size={16} /></div>
                                             <span>Best Answer</span>
-                                            <span className="mai-best-tag">{totalCount} AI models</span>
+                                            <span className="mai-best-tag">5 AI + Web</span>
                                           </div>
                                         </div>
                                         <div className="mai-best-body claude-prose">
                                           {m.consensus === 'generating'
                                             ? <div className="mai-synth-loading">
                                                 <div className="mai-synth-dots"><span /><span /><span /></div>
-                                                <span>Analyzing {totalCount} responses and building the best answer…</span>
+                                                <span>Analyzing all 5 AI + Web responses to build the definitive answer…</span>
                                               </div>
                                             : (() => {
                                                 const cText = m.consensus;
