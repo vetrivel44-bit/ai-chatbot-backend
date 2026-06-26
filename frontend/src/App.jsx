@@ -577,7 +577,7 @@ const MODES_LIST = [
   { id: "normal", name: "Normal Chat", icon: "Bot", desc: "General conversation and assistant" },
   { id: "deep_search", name: "DeepSearch", icon: "Brain", desc: "Multi-query research with citations" },
   { id: "analyst", name: "Data Analysis", icon: "Calculator", desc: "Deep data analysis and structured reports" },
-  { id: "multi_ai", name: "Multi-AI", icon: "Zap", desc: "Collaborative multi-model refinement" },
+  { id: "multi_ai", name: "Multi-AI", icon: "Zap", desc: "4 AI models compete — best answer wins" },
   { id: "debugger", name: "Code", icon: "Terminal", desc: "Expert code analysis and debugging" },
   { id: "summarize", name: "Summarize", icon: "FileText", desc: "Docs and long text synthesis" },
 ];
@@ -3235,37 +3235,49 @@ export default function App() {
     setTimeout(() => { if (textareaRef.current) { textareaRef.current.focus(); textareaRef.current.setSelectionRange(s + pre.length, s + pre.length + (sel || "text").length); } }, 0);
   };
 
+  const MULTI_AI_MODELS = [
+    { name: "Agnes 2.0", id: "agnes",    color: "#3b82f6", icon: "bolt" },
+    { name: "Mistral",   id: "mistral",  color: "#f97316", icon: "wind" },
+    { name: "Groq",      id: "groq",     color: "#10b981", icon: "zap" },
+    { name: "Gemini",    id: "gemini",   color: "#8b5cf6", icon: "sparkle" },
+  ];
+
   const handleMultiAI = async (hist, baseFd, userQuery, isFirstMsg, ctrl, isActive, reqId) => {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const emptyMultiMsg = {
       role: "assistant",
       isMultiAi: true,
       timestamp: ts,
-      models: [
-        { name: "Agnes 2.0", id: "agnes", content: "", status: "streaming" },
-        { name: "Mistral", id: "mistral", content: "", status: "streaming" }
-      ],
+      phase: "querying",
+      models: MULTI_AI_MODELS.map(m => ({ ...m, content: "", status: "waiting", startTime: null, endTime: null })),
       consensus: null
     };
-    
+
     setMessages([...hist, emptyMultiMsg]);
     setIsTyping(false);
     setIsWebSearching(false);
     setStreamStatus("streaming");
 
-    const updateModel = (idx, content, status) => {
+    const updateMultiMsg = (updater) => {
       if (!isActive()) return;
       setMessages(prev => {
         const u = [...prev];
         const last = { ...u[u.length - 1] };
         if (last.isMultiAi) {
-          last.models = [...last.models];
-          last.models[idx] = { ...last.models[idx] };
-          if (content !== undefined) last.models[idx].content = content;
-          if (status !== undefined) last.models[idx].status = status;
+          updater(last);
           u[u.length - 1] = last;
         }
         return u;
+      });
+    };
+
+    const updateModel = (idx, content, status, extra) => {
+      updateMultiMsg(last => {
+        last.models = [...last.models];
+        last.models[idx] = { ...last.models[idx] };
+        if (content !== undefined) last.models[idx].content = content;
+        if (status !== undefined) last.models[idx].status = status;
+        if (extra) Object.assign(last.models[idx], extra);
       });
     };
 
@@ -3274,44 +3286,62 @@ export default function App() {
       for (let [k, v] of baseFd.entries()) fd.append(k, v);
       fd.set("provider", provider);
       fd.set("mode", "normal");
+      const t0 = Date.now();
+      updateModel(idx, "", "streaming", { startTime: t0 });
       try {
         const res = await fetch(API + "/chat", { method: "POST", body: fd, signal: ctrl.signal });
         if (!res.ok) throw new Error("Failed");
         const reader = res.body.getReader();
         const bot = await readSSEStream(
           reader,
-          (acc) => { updateModel(idx, acc); if(!isScrolling.current) scrollToBottom(); },
+          (acc) => { updateModel(idx, acc); if (!isScrolling.current) scrollToBottom(); },
           () => {}, () => {}, isActive, reqId
         );
-        updateModel(idx, bot, "done");
-        return bot;
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        updateModel(idx, bot, "done", { endTime: Date.now(), elapsed });
+        return { provider, content: bot, elapsed };
       } catch (err) {
-        updateModel(idx, "Error: " + err.message, "error");
-        return "Error";
+        if (err.name === "AbortError") return { provider, content: "", elapsed: "0" };
+        updateModel(idx, "", "error", { endTime: Date.now() });
+        return { provider, content: "", error: true };
       }
     };
 
-    const [resp1, resp2] = await Promise.all([
-      runModel("agnes", 0),
-      runModel("mistral", 1)
-    ]);
+    // Phase 1: Query all models in parallel
+    const results = await Promise.all(
+      MULTI_AI_MODELS.map((m, i) => runModel(m.id, i))
+    );
 
     if (!isActive()) return;
-    
-    setMessages(prev => {
-      const u = [...prev];
-      const last = { ...u[u.length - 1] };
-      if (last.isMultiAi) last.consensus = "generating";
-      u[u.length - 1] = last;
-      return u;
-    });
+
+    // Phase 2: Synthesize best answer
+    updateMultiMsg(last => { last.phase = "synthesizing"; last.consensus = "generating"; });
+
+    const validResults = results.filter(r => r.content && !r.error);
+    const responseSummary = validResults.map((r, i) =>
+      `[${r.provider.toUpperCase()} — ${r.elapsed}s]\n${r.content.slice(0, 3000)}`
+    ).join("\n\n---\n\n");
 
     const consensusFd = new FormData();
-    consensusFd.append("input", `Synthesize a short consensus or best answer based on these two responses to the user's query: "${userQuery}".\n\nResponse 1:\n${resp1}\n\nResponse 2:\n${resp2}\n\nReturn ONLY the consensus text. No intros.`);
-    consensusFd.append("messages", JSON.stringify([{role: "user", content: "Synthesize consensus."}]));
+    consensusFd.append("input", `You are the chief synthesizer in a multi-AI council. ${validResults.length} AI models have answered the user's question independently. Your job is to produce the SINGLE BEST answer by:
+
+1. Identifying the strongest, most accurate points from each model
+2. Resolving any contradictions by picking the most well-reasoned version
+3. Adding structure and clarity that individual responses may lack
+4. Keeping the tone natural — this should read as one polished answer, not a comparison
+
+USER QUESTION: "${userQuery}"
+
+MODEL RESPONSES:
+${responseSummary}
+
+Write the definitive answer. Be comprehensive but concise. Do NOT mention or compare the models — just give the best answer. Use markdown formatting for readability.`);
+    consensusFd.append("messages", JSON.stringify([{ role: "user", content: "Synthesize the best answer." }]));
     consensusFd.append("mode", "normal");
     consensusFd.append("provider", "agnes");
-    
+    consensusFd.append("temperature", "0.4");
+    consensusFd.append("maxTokens", "4000");
+
     try {
       const cRes = await fetch(API + "/chat", { method: "POST", body: consensusFd, signal: ctrl.signal });
       const cReader = cRes.body.getReader();
@@ -3319,32 +3349,22 @@ export default function App() {
         cReader,
         (acc) => {
           if (!isActive()) return;
-          setMessages(prev => {
-            const u = [...prev];
-            const last = { ...u[u.length - 1] };
-            if (last.isMultiAi) last.consensus = acc;
-            u[u.length - 1] = last;
-            return u;
-          });
-          if(!isScrolling.current) scrollToBottom();
+          updateMultiMsg(last => { last.consensus = acc; });
+          if (!isScrolling.current) scrollToBottom();
         },
         () => {}, () => {}, isActive, reqId
       );
-      
+
+      updateMultiMsg(last => { last.phase = "complete"; });
+
       if (isActive() && isFirstMsg) {
         updateSessionTitle(userQuery, consensusText);
       }
-    } catch(err) {
+    } catch (err) {
       if (!isActive()) return;
-      setMessages(prev => {
-        const u = [...prev];
-        const last = { ...u[u.length - 1] };
-        if (last.isMultiAi) last.consensus = "Failed to generate consensus.";
-        u[u.length - 1] = last;
-        return u;
-      });
+      updateMultiMsg(last => { last.consensus = "Failed to generate synthesis."; last.phase = "complete"; });
     }
-    
+
     setIsLoading(false);
     setStreamStatus("idle");
   };
@@ -4442,82 +4462,110 @@ export default function App() {
                                : m.isPending && m.isVideoGen
                                ? <MediaGenCard type="video" text={m.content} />
                                : m.isMultiAi
-                               ? (
-                                  <div className="multi-ai-container">
-                                    <div className="multi-ai-cards">
-                                      {m.models.map((mod, midx) => {
-                                        const PROVIDER_COLORS = ['#3b82f6', '#f97316'];
-                                        const providerColor = PROVIDER_COLORS[midx] || '#8b5cf6';
-                                        const contentToRender = mod.content || "...";
-                                        const hasStruct = hasStructuredContent(contentToRender);
-                                        return (
-                                        <div key={midx} className="multi-ai-card">
-                                          <div className="multi-ai-card-accent" style={{ background: `linear-gradient(90deg, ${providerColor}, transparent)` }} />
-                                          <div className="multi-ai-card-header">
-                                            <div className="multi-ai-provider">
-                                              <div className="multi-ai-provider-icon" style={{ background: `${providerColor}18`, borderColor: `${providerColor}30` }}>
-                                                <Bot size={14} style={{ color: providerColor }} />
-                                              </div>
-                                              <span>{mod.name}</span>
-                                            </div>
-                                            {mod.status === 'streaming' ? (
-                                              <span className="multi-ai-status streaming">
-                                                <span className="multi-ai-status-dot" />
-                                                Generating
-                                              </span>
-                                            ) : mod.status === 'error' ? (
-                                              <span className="multi-ai-status error">Error</span>
-                                            ) : (
-                                              <span className="multi-ai-status done">
-                                                <Check size={10} /> Done
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className="multi-ai-card-body claude-prose">
-                                            {hasStruct
-                                              ? <StructuredResponseRenderer response={contentToRender} />
-                                              : <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]} components={{
-                                                  code({ inline, className, children }) {
-                                                    const codeString = String(children).replace(/\n$/, "");
-                                                    const langMatch = /language-(\w+)/.exec(className || "");
-                                                    if (inline || !langMatch) return <code className={className}>{children}</code>;
-                                                    return <CodeBlock match={langMatch} codeString={codeString} />;
-                                                  }
-                                                }}>{contentToRender}</ReactMarkdown>
-                                            }
-                                          </div>
-                                        </div>
-                                        );
-                                      })}
+                               ? (() => {
+                                  const doneCount = m.models.filter(md => md.status === 'done').length;
+                                  const totalCount = m.models.length;
+                                  const allDone = doneCount === totalCount;
+                                  const isSynthesizing = m.phase === 'synthesizing';
+                                  const isComplete = m.phase === 'complete';
+                                  return (
+                                  <div className="mai-container">
+                                    {/* Phase indicator */}
+                                    <div className="mai-phase-bar">
+                                      <div className="mai-phase-track">
+                                        <div className="mai-phase-fill" style={{ width: isComplete ? '100%' : isSynthesizing ? '75%' : `${(doneCount / totalCount) * 60}%` }} />
+                                      </div>
+                                      <span className="mai-phase-label">
+                                        {isComplete ? <><Check size={12} /> Complete — {totalCount} models consulted</>
+                                          : isSynthesizing ? <><Brain size={12} className="animate-pulse" /> Synthesizing best answer…</>
+                                          : <><Zap size={12} /> Querying {totalCount} AI models… ({doneCount}/{totalCount})</>}
+                                      </span>
                                     </div>
-                                    {m.consensus && (
-                                      <div className="multi-ai-consensus">
-                                        <div className="multi-ai-consensus-bar" />
-                                        <div className="multi-ai-consensus-header">
-                                          <div className="multi-ai-consensus-title">
-                                            <div className="multi-ai-consensus-icon">
-                                              <VetroSparkWhite size={15} />
-                                            </div>
-                                            AI Consensus
-                                          </div>
-                                          {m.consensus === 'generating' && (
-                                            <div className="multi-ai-consensus-dots">
-                                              <span /><span /><span />
-                                            </div>
-                                          )}
+
+                                    {/* Model status chips — compact row */}
+                                    <div className="mai-model-row">
+                                      {m.models.map((mod, midx) => (
+                                        <div key={midx} className={`mai-chip ${mod.status}`} style={{ '--mc': mod.color }}>
+                                          <span className="mai-chip-dot" />
+                                          <span className="mai-chip-name">{mod.name}</span>
+                                          {mod.status === 'done' && mod.elapsed && <span className="mai-chip-time">{mod.elapsed}s</span>}
+                                          {mod.status === 'streaming' && <span className="mai-chip-time">…</span>}
+                                          {mod.status === 'error' && <span className="mai-chip-time">failed</span>}
                                         </div>
-                                        <div className="multi-ai-consensus-body claude-prose">
-                                          {(() => {
-                                            const cText = m.consensus === 'generating' ? "Synthesizing the best answer..." : m.consensus;
-                                            return hasStructuredContent(cText)
-                                              ? <StructuredResponseRenderer response={cText} />
-                                              : <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}>{cText}</ReactMarkdown>;
-                                          })()}
+                                      ))}
+                                    </div>
+
+                                    {/* Best Answer — the hero section */}
+                                    {m.consensus && (
+                                      <div className="mai-best-answer">
+                                        <div className="mai-best-glow" />
+                                        <div className="mai-best-header">
+                                          <div className="mai-best-badge">
+                                            <div className="mai-best-icon"><VetroSparkWhite size={16} /></div>
+                                            <span>Best Answer</span>
+                                            <span className="mai-best-tag">{totalCount} AI models</span>
+                                          </div>
+                                        </div>
+                                        <div className="mai-best-body claude-prose">
+                                          {m.consensus === 'generating'
+                                            ? <div className="mai-synth-loading">
+                                                <div className="mai-synth-dots"><span /><span /><span /></div>
+                                                <span>Analyzing {totalCount} responses and building the best answer…</span>
+                                              </div>
+                                            : (() => {
+                                                const cText = m.consensus;
+                                                return hasStructuredContent(cText)
+                                                  ? <StructuredResponseRenderer response={cText} />
+                                                  : <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}>{cText}</ReactMarkdown>;
+                                              })()
+                                          }
                                         </div>
                                       </div>
                                     )}
+
+                                    {/* Expandable individual model responses */}
+                                    {allDone && m.models.some(md => md.content) && (
+                                      <details className="mai-sources">
+                                        <summary className="mai-sources-toggle">
+                                          <ChevronRight size={14} className="mai-sources-chevron" />
+                                          View individual model responses
+                                          <span className="mai-sources-count">{m.models.filter(md => md.content).length}</span>
+                                        </summary>
+                                        <div className="mai-sources-grid">
+                                          {m.models.filter(md => md.content).map((mod, midx) => {
+                                            const contentToRender = mod.content;
+                                            const hasStruct = hasStructuredContent(contentToRender);
+                                            return (
+                                              <div key={midx} className="mai-source-card" style={{ '--mc': mod.color }}>
+                                                <div className="mai-source-header">
+                                                  <div className="mai-source-provider">
+                                                    <span className="mai-source-dot" />
+                                                    <span>{mod.name}</span>
+                                                  </div>
+                                                  {mod.elapsed && <span className="mai-source-time">{mod.elapsed}s</span>}
+                                                </div>
+                                                <div className="mai-source-body claude-prose">
+                                                  {hasStruct
+                                                    ? <StructuredResponseRenderer response={contentToRender} />
+                                                    : <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]} components={{
+                                                        code({ inline, className, children }) {
+                                                          const codeString = String(children).replace(/\n$/, "");
+                                                          const langMatch = /language-(\w+)/.exec(className || "");
+                                                          if (inline || !langMatch) return <code className={className}>{children}</code>;
+                                                          return <CodeBlock match={langMatch} codeString={codeString} />;
+                                                        }
+                                                      }}>{contentToRender}</ReactMarkdown>
+                                                  }
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </details>
+                                    )}
                                   </div>
-                               )
+                                  );
+                               })()
                                : !m.content && isLoading
                                ? <div style={{ paddingTop: 4, color: "var(--ink-3)" }}>
                                    <div className="flex gap-2 items-center">
