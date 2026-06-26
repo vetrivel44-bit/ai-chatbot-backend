@@ -1,6 +1,6 @@
 const logger = require("../utils/logger");
 
-const BASE = "https://cricbuzz-live-api.vercel.app";
+const BASE = "https://cricbuzz-live.vercel.app/v1";
 
 // ── In-memory cache (30s TTL) ────────────────────────────────────────
 const cache = new Map();
@@ -26,140 +26,144 @@ async function safeFetch(url) {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function parseTeamScore(scoreStr) {
+function parseScoreString(scoreStr) {
   if (!scoreStr) return { runs: null, wickets: null, overs: null, raw: "" };
   const m = scoreStr.match(/(\d+)(?:\/(\d+))?\s*(?:\(([^)]+)\))?/);
   return {
     runs: m ? Number(m[1]) : null,
     wickets: m && m[2] ? Number(m[2]) : null,
     overs: m && m[3] ? m[3].trim() : null,
-    raw: scoreStr,
+    raw: scoreStr.trim(),
   };
 }
 
 function detectFormat(title) {
   const t = (title || "").toLowerCase();
-  if (t.includes("t20") || t.includes("twenty20") || t.includes("ipl") || t.includes("bbl") || t.includes("psl") || t.includes("cpl")) return "T20";
-  if (t.includes("odi") || t.includes("one day")) return "ODI";
+  if (t.includes("t20") || t.includes("twenty20") || t.includes("ipl") || t.includes("bbl") || t.includes("bpl") || t.includes("psl") || t.includes("cpl") || t.includes("ilt20") || t.includes("sa20")) return "T20";
+  if (t.includes("odi") || t.includes("one day") || t.includes("one-day")) return "ODI";
   if (t.includes("test")) return "Test";
-  return "Unknown";
+  return "Limited Overs";
+}
+
+function parseTeamFromLiveMatch(teamObj) {
+  if (!teamObj) return { name: "", shortName: "", score: null, wickets: null, overs: null, scoreRaw: "" };
+  const name = (teamObj.team || "").replace(/\.\./g, "").trim();
+  const parsed = parseScoreString(teamObj.run || "");
+  return {
+    name,
+    shortName: name,
+    score: parsed.runs,
+    wickets: parsed.wickets,
+    overs: parsed.overs,
+    scoreRaw: parsed.raw || teamObj.run || "",
+  };
 }
 
 // ── Public API ───────────────────────────────────────────────────────
 
 async function getLiveMatches() {
   return cached("live", async () => {
-    const raw = await safeFetch(`${BASE}/matches`);
-    const matches = raw.matches || raw.data || raw || [];
-    if (!Array.isArray(matches)) return [];
+    const types = ["international", "league", "domestic", "women"];
+    const results = await Promise.allSettled(
+      types.map((type) => safeFetch(`${BASE}/matches/live?type=${type}`))
+    );
 
-    return matches.map((m) => {
-      const score1 = parseTeamScore(m.team1Score || m.team1score);
-      const score2 = parseTeamScore(m.team2Score || m.team2score);
-      return {
-        id: m.id || m.matchId,
-        title: m.title || m.matchTitle || "",
-        format: detectFormat(m.title || m.matchTitle || m.seriesName || ""),
-        status: m.status || m.matchStatus || "",
-        venue: m.venue || m.ground || "",
-        team1: {
-          name: m.team1 || m.team1Name || "",
-          shortName: m.team1Short || m.team1Abbreviation || "",
-          score: score1.runs,
-          wickets: score1.wickets,
-          overs: score1.overs,
-          scoreRaw: score1.raw,
-        },
-        team2: {
-          name: m.team2 || m.team2Name || "",
-          shortName: m.team2Short || m.team2Abbreviation || "",
-          score: score2.runs,
-          wickets: score2.wickets,
-          overs: score2.overs,
-          scoreRaw: score2.raw,
-        },
-        toss: m.toss || m.tossResult || null,
-        series: m.seriesName || m.series || "",
-        startTime: m.startTime || m.startDate || null,
-      };
-    });
+    const allMatches = [];
+    const seenIds = new Set();
+
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      const matches = result.value?.data?.matches || [];
+      for (const m of matches) {
+        if (seenIds.has(m.id)) continue;
+        seenIds.add(m.id);
+
+        const teams = m.teams || [];
+        const t1 = parseTeamFromLiveMatch(teams[0]);
+        const t2 = parseTeamFromLiveMatch(teams[1]);
+        const venue = m.timeAndPlace?.place?.replace(/^at\s+/i, "") || "";
+
+        allMatches.push({
+          id: m.id,
+          title: (m.title || "").replace(/,\s*$/, "").trim(),
+          format: detectFormat(m.title || ""),
+          status: m.overview || "",
+          venue,
+          date: m.timeAndPlace?.date || "",
+          team1: t1,
+          team2: t2,
+          toss: null,
+          series: "",
+          startTime: m.timeAndPlace?.time || null,
+        });
+      }
+    }
+
+    return allMatches;
   });
 }
 
 async function getMatchDetails(matchId) {
   return cached(`match:${matchId}`, async () => {
-    const [info, scorecard] = await Promise.all([
-      safeFetch(`${BASE}/match/${matchId}`).catch(() => null),
-      safeFetch(`${BASE}/match/${matchId}/scorecard`).catch(() => null),
-    ]);
+    const raw = await safeFetch(`${BASE}/score/${matchId}`);
+    const d = raw.data || {};
 
-    const base = info || {};
-    const sc = scorecard || {};
+    const liveScore = parseScoreString(d.liveScore);
 
     return {
       id: matchId,
-      title: base.title || base.matchTitle || "",
-      format: detectFormat(base.title || base.matchTitle || base.seriesName || ""),
-      status: base.status || base.matchStatus || "",
-      venue: base.venue || base.ground || "",
-      toss: base.toss || base.tossResult || null,
-      series: base.seriesName || base.series || "",
-      team1: {
-        name: base.team1 || base.team1Name || "",
-        shortName: base.team1Short || "",
-      },
-      team2: {
-        name: base.team2 || base.team2Name || "",
-        shortName: base.team2Short || "",
-      },
-      scorecard: sc.scorecard || sc.innings || sc.data || sc || null,
-      currentRunRate: base.currentRunRate || base.crr || null,
-      requiredRunRate: base.requiredRunRate || base.rrr || null,
-      matchSummary: base.status || base.result || null,
+      title: d.title || "",
+      format: detectFormat(d.title || ""),
+      status: d.update || "",
+      liveScore: d.liveScore || "",
+      runRate: d.runRate || null,
+      batsmen: [
+        {
+          name: d.batsmanOne || "",
+          runs: d.batsmanOneRun || "0",
+          balls: (d.batsmanOneBall || "").replace(/[()]/g, ""),
+          strikeRate: d.batsmanOneSR || "0",
+        },
+        {
+          name: d.batsmanTwo || "",
+          runs: d.batsmanTwoRun || "0",
+          balls: (d.batsmanTwoBall || "").replace(/[()]/g, ""),
+          strikeRate: d.batsmanTwoSR || "0",
+        },
+      ],
+      bowlers: [
+        {
+          name: d.bowlerOne || "",
+          overs: d.bowlerOneOver || "",
+          runs: d.bowlerOneRun || "",
+          wickets: d.bowlerOneWickets || "",
+          economy: d.bowlerOneEconomy || "",
+        },
+        {
+          name: d.bowlerTwo || "",
+          overs: d.bowlerTwoOver || "",
+          runs: d.bowlerTwoRun || "",
+          wickets: d.bowlerTwoWicket || "",
+          economy: d.bowlerTwoEconomy || "",
+        },
+      ],
+      currentRunRate: liveScore.overs ? null : null,
+      requiredRunRate: null,
+      matchSummary: d.update || "",
     };
   });
 }
 
 async function getCommentary(matchId) {
-  return cached(`commentary:${matchId}`, async () => {
-    const raw = await safeFetch(`${BASE}/match/${matchId}/commentary`);
-    const list = raw.commentary || raw.data || raw || [];
-    if (!Array.isArray(list)) return { matchId, commentary: [] };
-
-    return {
-      matchId,
-      commentary: list.map((c) => ({
-        text: c.text || c.commText || c.commentary || "",
-        ball: c.ball || c.overNumber || null,
-        runs: c.runs ?? c.run ?? null,
-        isWicket: !!(c.isWicket || c.wicket),
-        isBoundary: !!(c.isFour || c.isSix || c.boundary),
-        isSix: !!c.isSix,
-        isFour: !!c.isFour,
-        extras: c.extras || null,
-        timestamp: c.timestamp || null,
-      })),
-    };
-  });
+  return cached(`commentary:${matchId}`, () =>
+    Promise.resolve({ matchId, commentary: [], note: "Ball-by-ball commentary not available from this API source" })
+  );
 }
 
 async function getPlayerInfo(playerId) {
-  return cached(`player:${playerId}`, async () => {
-    const raw = await safeFetch(`${BASE}/player/${playerId}`);
-    const p = raw.player || raw.data || raw || {};
-    return {
-      id: playerId,
-      name: p.name || p.playerName || "",
-      team: p.team || p.teamName || "",
-      role: p.role || p.playingRole || "",
-      battingStyle: p.battingStyle || p.batStyle || null,
-      bowlingStyle: p.bowlingStyle || p.bowlStyle || null,
-      country: p.country || p.nationality || null,
-      dob: p.dob || p.dateOfBirth || null,
-      image: p.image || p.faceImageId || null,
-      stats: p.stats || p.career || null,
-    };
-  });
+  return cached(`player:${playerId}`, () =>
+    Promise.resolve({ id: playerId, note: "Player details not available from this API source" })
+  );
 }
 
 module.exports = {

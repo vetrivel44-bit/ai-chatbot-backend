@@ -13,7 +13,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./App.css";
 import GoogleLoginButton from "./components/auth/GoogleLoginButton";
-import { Paperclip, X, CornerDownRight, ArrowDown, Zap, Globe, Play, Calendar, Paintbrush, Brain, Calculator, Target, Coffee, Leaf, Bot, GraduationCap, Terminal, Star, Smile, Pause, RotateCcw, Check, Timer, User, Flame, Rocket, Palette, Moon, Sun, Compass, Anchor, Crown, Gem, Shield, Heart, Key, Lock, ThumbsUp, Frown, Search, FileText, PenLine, Code, Lightbulb, Download, MessageSquare, FolderClosed, LayoutGrid, SlidersHorizontal, FlaskConical, Ghost, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Trash2, LogOut, Settings, HelpCircle, Plus, ExternalLink, Smartphone, Tablet, Monitor, Layers, Newspaper } from "lucide-react";
+import { Paperclip, X, CornerDownRight, ArrowDown, Zap, Globe, Play, Calendar, Paintbrush, Brain, Calculator, Target, Coffee, Leaf, Bot, GraduationCap, Terminal, Star, Smile, Pause, RotateCcw, Check, Timer, User, Flame, Rocket, Palette, Moon, Sun, Compass, Anchor, Crown, Gem, Shield, Heart, Key, Lock, ThumbsUp, Frown, Search, FileText, PenLine, Code, Lightbulb, Download, MessageSquare, FolderClosed, LayoutGrid, SlidersHorizontal, FlaskConical, Ghost, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, MoreHorizontal, Pencil, Trash2, LogOut, Settings, HelpCircle, Plus, ExternalLink, Smartphone, Tablet, Monitor, Layers, Newspaper, Briefcase } from "lucide-react";
 import StructuredResponseRenderer from "./components/structured/StructuredResponseRenderer";
 
 const STRUCT_TYPE_RE = /"type"\s*:\s*"(location|route|chart|timeline|comparison_table|comparison|metrics|architecture|gallery|visual_gallery|collapsible|editor|results|onboarding|mcq)"/;
@@ -21,6 +21,7 @@ const hasStructuredContent = (text) => !!text && STRUCT_TYPE_RE.test(text);
 import ThinkingIndicator from "./components/ThinkingIndicator";
 import GlobalSearch from "./components/screens/GlobalSearch";
 import UpgradeModal from "./components/screens/UpgradeModal";
+import JobSearchPanel from "./components/screens/JobSearchPanel";
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 let baseApi = "/api";
@@ -2344,14 +2345,18 @@ function NewsPanel({ onClose }) {
 const SPORTS_API_KEY = "090ff94108353371ff5cdcd918e9e321";
 const SPORTS_API_BASE = "https://v3.football.api-sports.io";
 
-const SPORTS_QUERY_RE = /\b(live\s*scor|score|match|football|soccer|premier\s*league|la\s*liga|serie\s*a|bundesliga|champions\s*league|ipl|cricket|nba|basketball|tennis|fifa|epl|ucl|world\s*cup|europa|league|fixture|playing|vs\b|versus)\b/i;
-const CRICKET_QUERY_RE = /\b(cricket|ipl|odi|t20|test\s*match|bcci|bpl|psl|big\s*bash|ashes|cwc|wtc|rcb|csk|mi\b|kkr|srh|dc\b|pbks|gt\b|lsg|rr\b|innings|wicket|batsman|bowler|batting|bowling)\b/i;
+const FOOTBALL_QUERY_RE = /\b(football|soccer|premier\s*league|la\s*liga|serie\s*a|bundesliga|champions\s*league|fifa|epl|ucl|europa|messi|ronaldo|neymar|goal\s*keeper)\b/i;
+const CRICKET_QUERY_RE = /\b(cricket|ipl|odi|t20|test\s*match|bcci|bpl|psl|big\s*bash|ashes|cwc|wtc|rcb|csk|mi\b|kkr|srh|dc\b|pbks|gt\b|lsg|rr\b|innings|wicket|batsman|bowler|batting|bowling|virat|rohit|dhoni|sachin)\b/i;
+const GENERIC_SPORTS_RE = /\b(live\s*scor|score|match|playing|vs\b|versus|fixture|world\s*cup|league)\b/i;
 
-function isSportsQuery(text) {
-  return SPORTS_QUERY_RE.test(text);
+function isFootballQuery(text) {
+  return FOOTBALL_QUERY_RE.test(text);
 }
 function isCricketQuery(text) {
   return CRICKET_QUERY_RE.test(text);
+}
+function isSportsQuery(text) {
+  return FOOTBALL_QUERY_RE.test(text) || CRICKET_QUERY_RE.test(text) || GENERIC_SPORTS_RE.test(text);
 }
 
 async function fetchLiveFootball() {
@@ -2382,18 +2387,23 @@ async function fetchLiveCricket(apiBase) {
     const res = await fetch(`${apiBase}/cricket/live`);
     if (!res.ok) return [];
     const data = await res.json();
-    const matches = data.data?.matches || [];
+    const matches = data.data?.matches || data.matches || [];
+    if (!matches.length) return [];
     return matches.map(m => ({ ...m, _sport: "cricket" }));
-  } catch { return []; }
+  } catch (e) {
+    console.warn("Cricket fetch failed:", e.message);
+    return [];
+  }
 }
 
 async function fetchAllLiveScores(apiBase, query) {
   const wantsCricket = isCricketQuery(query);
-  const wantsFootball = !wantsCricket || isSportsQuery(query);
+  const wantsFootball = isFootballQuery(query);
+  const isGeneric = !wantsCricket && !wantsFootball;
 
   const promises = [];
-  if (wantsCricket) promises.push(fetchLiveCricket(apiBase));
-  if (wantsFootball) promises.push(fetchLiveFootball().then(live => live.length > 0 ? live : fetchTodayFootball()));
+  if (wantsCricket || isGeneric) promises.push(fetchLiveCricket(apiBase));
+  if (wantsFootball || isGeneric) promises.push(fetchLiveFootball().then(live => live.length > 0 ? live : fetchTodayFootball()));
 
   const results = await Promise.all(promises);
   return results.flat();
@@ -2403,33 +2413,51 @@ function CricketCard({ match }) {
   const t1 = match.team1 || {};
   const t2 = match.team2 || {};
   const statusText = match.status || "";
-  const isLive = statusText.toLowerCase().includes("live") || statusText.includes("need") || statusText.includes("require") || (t1.overs && !statusText.toLowerCase().includes("won") && !statusText.toLowerCase().includes("drawn"));
+  const st = statusText.toLowerCase();
+  const isLive = st.includes("need") || st.includes("require") || st.includes("trail") || st.includes("lead") || (t1.overs && !st.includes("won") && !st.includes("drawn") && !st.includes("no result"));
+  const isResult = st.includes("won") || st.includes("drawn") || st.includes("no result") || st.includes("match tied");
+
+  const formatScore = (t) => {
+    if (t.scoreRaw) return t.scoreRaw;
+    if (t.score != null) return `${t.score}${t.wickets != null ? "/" + t.wickets : ""}`;
+    return "—";
+  };
+
   return (
     <div className={`ls-card ${isLive ? "ls-card-live" : ""}`}>
       <div className="ls-card-header">
         <div className="ls-league-row">
           <span className="ls-sport-icon">🏏</span>
-          <span className="ls-league-name">{match.series || match.title || "Cricket"}</span>
-          {match.format && <span className="ls-format-tag">{match.format}</span>}
+          <span className="ls-league-name">{match.title || match.series || "Cricket"}</span>
+          {match.format && match.format !== "Unknown" && <span className="ls-format-tag">{match.format}</span>}
           {isLive && <span className="ls-live-badge">LIVE</span>}
         </div>
         {match.venue && <div className="ls-venue">{match.venue}</div>}
       </div>
       <div className="ls-divider" />
-      <div className="ls-cricket-body">
-        <div className="ls-cricket-team">
-          <div className="ls-cricket-team-name">{t1.name || t1.shortName || "Team 1"}</div>
-          <div className="ls-cricket-score">
-            {t1.scoreRaw || (t1.score != null ? `${t1.score}${t1.wickets != null ? "/" + t1.wickets : ""}` : "—")}
-            {t1.overs && <span className="ls-cricket-overs">({t1.overs})</span>}
+      <div className="ls-match-row">
+        <div className="ls-team-side">
+          <div className="ls-team-crest"><span>🏏</span></div>
+          <div className={`ls-team-label ${!isResult && t1.score > (t2.score || 0) ? "ls-bold" : ""}`}>{t1.name || "Team 1"}</div>
+        </div>
+        <div className="ls-score-block ls-cricket-scores">
+          <div className="ls-cricket-score-col">
+            <div className="ls-score-big">{formatScore(t1)}</div>
+            {t1.overs && <div className="ls-cricket-overs">({t1.overs})</div>}
+          </div>
+          <div className="ls-status-center">
+            <span className={`ls-status-badge ${isLive ? "ls-live" : isResult ? "ls-ft" : "ls-ns"}`}>
+              {isLive ? "LIVE" : isResult ? "Result" : match.date || "—"}
+            </span>
+          </div>
+          <div className="ls-cricket-score-col">
+            <div className="ls-score-big">{formatScore(t2)}</div>
+            {t2.overs && <div className="ls-cricket-overs">({t2.overs})</div>}
           </div>
         </div>
-        <div className="ls-cricket-team">
-          <div className="ls-cricket-team-name">{t2.name || t2.shortName || "Team 2"}</div>
-          <div className="ls-cricket-score">
-            {t2.scoreRaw || (t2.score != null ? `${t2.score}${t2.wickets != null ? "/" + t2.wickets : ""}` : "—")}
-            {t2.overs && <span className="ls-cricket-overs">({t2.overs})</span>}
-          </div>
+        <div className="ls-team-side ls-team-right">
+          <div className="ls-team-crest"><span>🏏</span></div>
+          <div className={`ls-team-label ${!isResult && t2.score > (t1.score || 0) ? "ls-bold" : ""}`}>{t2.name || "Team 2"}</div>
         </div>
       </div>
       {statusText && <div className="ls-result">{statusText}</div>}
@@ -2641,6 +2669,7 @@ export default function App() {
   // ── Chat ──────────────────────────────────────────────────────────────────────
   const [messages, setMessages]             = useState([]);
   const [isIncognito, setIsIncognito]       = useState(false);
+  const [showJobs, setShowJobs]             = useState(false);
   const [input, setInput]                   = useState("");
   const [editIdx, setEditIdx]               = useState(null);
   const [editInput, setEditInput]           = useState("");
@@ -4582,6 +4611,9 @@ Write the definitive, comprehensive answer with proper markdown formatting (head
             })()}
           </div>
           <div className="ch-right">
+            <button type="button" className="claude-sb-item claude-sb-icon-btn flex items-center justify-center rounded-md" onClick={() => setShowJobs(true)} title="Jobs" style={{ color: "var(--ink-4)" }}>
+              <Briefcase size={18} />
+            </button>
             <button type="button" className="claude-sb-item claude-sb-icon-btn flex items-center justify-center rounded-md" onClick={() => setShowNews(true)} title="News" style={{ color: "var(--ink-4)" }}>
               <Newspaper size={18} />
             </button>
@@ -4598,6 +4630,7 @@ Write the definitive, comprehensive answer with proper markdown formatting (head
         </header>
         {showShare && <ShareModal onClose={() => setShowShare(false)} t={t} messages={messages} />}
         {showNews && <NewsPanel onClose={() => setShowNews(false)} />}
+        {showJobs && <JobSearchPanel onClose={() => setShowJobs(false)} />}
 
         {/* Incognito banner */}
         {isIncognito && (
