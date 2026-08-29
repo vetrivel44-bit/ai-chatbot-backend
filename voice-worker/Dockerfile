@@ -1,6 +1,6 @@
 FROM python:3.10-slim-bullseye
 
-# Cache-bust marker: cpu-openvoice-demucs-20260829
+# Cache-bust marker: cpu-openvoice-demucs-stable-20260829
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -18,17 +18,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 
-# Install a CPU-only torch stack before the remaining packages. Render's free
-# worker has no GPU, so downloading CUDA/NVIDIA packages only wastes disk and
-# memory. The pinned OpenVoice/PyAV stack also needs legacy setuptools/Cython.
+# Render has no GPU. Install CPU PyTorch first, then keep OpenVoice's older
+# dependency stack intact. DiffQ is installed without dependencies so it cannot
+# replace CPU torch with CUDA torch or upgrade NumPy/Cython/setuptools.
 RUN pip install --upgrade "pip<26" wheel \
-    && pip install "setuptools==70.3.0" "Cython<3" \
+    && pip install "setuptools==70.3.0" "Cython==0.29.37" \
     && pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "torchaudio==2.5.1" \
-    && python -c "import torch; assert not torch.cuda.is_available(); print('CPU-only PyTorch OK', torch.__version__)" \
+    && python -c "import torch; assert '+cpu' in torch.__version__ or not torch.cuda.is_available(); print('CPU-only PyTorch OK', torch.__version__)" \
     && pip install --no-build-isolation -r requirements.txt \
-    && pip install --force-reinstall --no-deps "setuptools==70.3.0" \
-    && pip install --force-reinstall "diffq==0.2.4" \
-    && python -c "import pkg_resources, librosa, diffq, torch; print('OpenVoice runtime + DiffQ + CPU torch OK', torch.__version__)"
+    && pip install --force-reinstall --no-deps "numpy==1.22.0" "MarkupSafe==2.1.5" "setuptools==70.3.0" "Cython==0.29.37" \
+    && pip install --force-reinstall --no-deps "diffq==0.2.4" \
+    && python -c "import torch, numpy, Cython, pkg_resources, librosa, diffq; assert not torch.cuda.is_available(); assert numpy.__version__ == '1.22.0'; assert Cython.__version__.startswith('0.29.'); print('Stable CPU OpenVoice stack OK', torch.__version__, numpy.__version__, Cython.__version__)"
 
 RUN mkdir -p "${OPENVOICE_MODEL_DIR}/checkpoints_v2" \
     && python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='myshell-ai/OpenVoiceV2', revision='fd981100305a0e4291f93a9ad169c6d9f7bed54a', local_dir='${OPENVOICE_MODEL_DIR}/checkpoints_v2', allow_patterns=['converter/*']); print('OpenVoice V2 downloaded')" \
