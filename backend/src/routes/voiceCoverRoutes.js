@@ -16,7 +16,7 @@ router.post("/process", upload.fields([{name:"song",maxCount:1},{name:"reference
     if (req.body.consent !== "true") return fail(res,400,"Voice authorization consent is required.","VOICE_CONSENT_REQUIRED");
 
     const workerUrl = process.env.VOICE_COVER_WORKER_URL;
-    if (!workerUrl) return fail(res,503,"Self-voice engine is not deployed yet. Deploy the bundled Voice Cover worker and set VOICE_COVER_WORKER_URL in Render.","VOICE_WORKER_NOT_CONFIGURED");
+    if (!workerUrl) return fail(res,503,"Self-voice engine is not deployed yet. Set VOICE_COVER_WORKER_URL in Render.","VOICE_WORKER_NOT_CONFIGURED");
 
     const form = new FormData();
     form.append("song", new Blob([song.buffer], {type:song.mimetype}), song.originalname || "song.mp3");
@@ -25,8 +25,14 @@ router.post("/process", upload.fields([{name:"song",maxCount:1},{name:"reference
 
     const response = await fetch(`${workerUrl.replace(/\/$/,"")}/process`, {method:"POST",body:form});
     if (!response.ok) {
-      const text = await response.text();
-      return fail(res,response.status, text || "Self-voice processing failed.","VOICE_WORKER_FAILED");
+      const raw = await response.text();
+      let message = raw || "Self-voice processing failed.";
+      try {
+        const parsed = JSON.parse(raw);
+        message = parsed?.detail || parsed?.message || message;
+      } catch {}
+      console.error("voice worker failed", response.status, message);
+      return fail(res,response.status,message,"VOICE_WORKER_FAILED");
     }
 
     const type = response.headers.get("content-type") || "audio/mpeg";
