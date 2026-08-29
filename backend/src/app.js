@@ -14,6 +14,9 @@ const { successResponse } = require("./utils/response");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
+// Render terminates TLS/proxies requests before they reach Express. Trust exactly
+// one proxy hop so express-rate-limit can safely use X-Forwarded-For.
+if (process.env.RENDER) app.set("trust proxy", 1);
 app.use(helmet({crossOriginOpenerPolicy:{policy:"same-origin-allow-popups"},crossOriginResourcePolicy:{policy:"cross-origin"},contentSecurityPolicy:false}));
 app.use(cors({origin:function(origin,callback){callback(null,true);},credentials:true}));
 app.post("/api/billing/webhook",express.raw({type:"application/json"}),require("./controllers/billingController").webhook);
