@@ -1,5 +1,4 @@
 const logger = require("../utils/logger");
-const groqAdapter = require("../providers/groqAdapter");
 const geminiAdapter = require("../providers/geminiAdapter");
 const mistralAdapter = require("../providers/mistralAdapter");
 const sambanovaAdapter = require("../providers/sambanovaAdapter");
@@ -19,19 +18,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "mistral", "agnes", "sambanova", "gemini"],
-      },
-      groq: {
-        adapter: groqAdapter,
-        weight: 80,
-        score: 80,
-        latency: 0,
-        successRate: 1,
-        consecutiveErrors: 0,
-        isSuspended: false,
-        lastFailure: 0,
-        cooldown: 20000,
-        fallbacks: ["chatgpt", "agnes", "mistral", "sambanova", "gemini"],
+        fallbacks: ["mistral", "agnes", "sambanova", "gemini"],
       },
       mistral: {
         adapter: mistralAdapter,
@@ -43,7 +30,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "sambanova", "agnes", "gemini"],
+        fallbacks: ["chatgpt", "sambanova", "agnes", "gemini"],
       },
       agnes: {
         adapter: agnesAdapter,
@@ -55,7 +42,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "groq", "sambanova", "gemini"],
+        fallbacks: ["mistral", "chatgpt", "sambanova", "gemini"],
       },
       sambanova: {
         adapter: sambanovaAdapter,
@@ -67,11 +54,11 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "mistral", "agnes", "gemini"],
+        fallbacks: ["mistral", "agnes", "chatgpt", "gemini"],
       },
       gemini: {
         adapter: geminiAdapter,
-        weight: 50, // Lowered — free quota often exhausted
+        weight: 50,
         score: 50,
         latency: 0,
         successRate: 1,
@@ -79,13 +66,12 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["groq", "mistral", "agnes", "sambanova"],
+        fallbacks: ["mistral", "agnes", "sambanova", "chatgpt"],
       },
     };
 
-    // Background health check loop - only in non-serverless
     if (!process.env.LAMBDA_TASK_ROOT) {
-      setInterval(() => this.checkHealth(), 15000); // every 15 s
+      setInterval(() => this.checkHealth(), 15000);
     }
   }
 
@@ -108,11 +94,9 @@ class ProviderManager {
   }
 
   getBestProvider(mode, preferredProvider) {
-    // If user explicitly chose a provider, try it first if not suspended
     if (preferredProvider && preferredProvider !== "undefined") {
       const pref = preferredProvider.toLowerCase();
       if (this.providers[pref]) {
-        // Unsuspend if cooldown has passed
         const p = this.providers[pref];
         if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
           p.isSuspended = false;
@@ -122,7 +106,6 @@ class ProviderManager {
       }
     }
 
-    // Auto-expire cooled-down suspensions before picking
     for (const [, p] of Object.entries(this.providers)) {
       if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
         p.isSuspended = false;
@@ -131,24 +114,20 @@ class ProviderManager {
     }
 
     const candidates = Object.keys(this.providers).filter(name => !this.providers[name].isSuspended);
-
-    // If ALL are still suspended, force-reset and use all
     if (candidates.length === 0) {
       this.resetAllProviders();
       candidates.push(...Object.keys(this.providers));
     }
 
-    // Sort by weighted score
     return candidates.sort((a, b) => {
       const pA = this.providers[a];
       const pB = this.providers[b];
-
       let scoreA = pA.weight;
       let scoreB = pB.weight;
 
       if (mode === "debugger" || mode === "coding") {
-        if (a === "groq") scoreA += 50;
-        if (b === "groq") scoreB += 50;
+        if (a === "chatgpt") scoreA += 50;
+        if (b === "chatgpt") scoreB += 50;
       } else if (mode === "deep_search" || mode === "analyst") {
         if (a === "gemini") scoreA += 50;
         if (b === "gemini") scoreB += 50;
@@ -163,9 +142,8 @@ class ProviderManager {
 
   getFallbackProvider(failedProvider) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "groq", "agnes"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "agnes", "chatgpt"];
 
-    // Auto-expire cooled-down suspensions first
     for (const [, prov] of Object.entries(this.providers)) {
       if (prov.isSuspended && Date.now() - prov.lastFailure > prov.cooldown) {
         prov.isSuspended = false;
@@ -174,12 +152,9 @@ class ProviderManager {
     }
 
     for (const f of fallbackList) {
-      if (this.providers[f] && !this.providers[f].isSuspended) {
-        return f;
-      }
+      if (this.providers[f] && !this.providers[f].isSuspended) return f;
     }
 
-    // All fallbacks exhausted — reset everything and pick highest weight
     this.resetAllProviders();
     return Object.keys(this.providers).sort(
       (a, b) => this.providers[b].weight - this.providers[a].weight
@@ -197,7 +172,6 @@ class ProviderManager {
     } else {
       p.consecutiveErrors++;
       p.successRate = (p.successRate * 0.9);
-      // Only suspend after 5 consecutive failures so transient errors don't kill the provider
       if (p.consecutiveErrors >= 5) {
         logger.warn(`ProviderManager: Suspending ${providerName} after ${p.consecutiveErrors} consecutive errors`);
         p.isSuspended = true;
