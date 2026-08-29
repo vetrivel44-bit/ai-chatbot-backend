@@ -5,10 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=10000 \
     OPENVOICE_MODEL_DIR=/opt/models/openvoice-v2 \
-    DEMUCS_MODEL=mdx_q
+    DEMUCS_MODEL=mdx_q \
+    HF_HUB_DISABLE_XET=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg git build-essential pkg-config libsndfile1 curl unzip \
+    ffmpeg git build-essential pkg-config libsndfile1 \
     libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
     libavutil-dev libswresample-dev libswscale-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -25,15 +26,11 @@ RUN pip install --upgrade "pip<26" wheel \
     && pip install --force-reinstall --no-deps "setuptools==70.3.0" \
     && python -c "import pkg_resources, librosa; print('OpenVoice runtime dependencies OK')"
 
-# OpenVoice V2 officially ships its converter as checkpoints_v2/converter.
-# Download it during the image build so the first user request never has to
-# fetch model files while the browser is waiting.
-RUN mkdir -p "${OPENVOICE_MODEL_DIR}" \
-    && curl -fL --retry 4 --retry-delay 3 \
-      "https://myshell-public-repo-host.s3.amazonaws.com/openvoice/checkpoints_v2_0417.zip" \
-      -o /tmp/openvoice-v2.zip \
-    && unzip -q /tmp/openvoice-v2.zip -d "${OPENVOICE_MODEL_DIR}" \
-    && rm -f /tmp/openvoice-v2.zip \
+# The old MyShell S3 archive URL now returns 404. The official V2 converter
+# is available from myshell-ai/OpenVoiceV2 on Hugging Face. Download only the
+# converter files and place them in the layout expected by app.py.
+RUN mkdir -p "${OPENVOICE_MODEL_DIR}/checkpoints_v2" \
+    && python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='myshell-ai/OpenVoiceV2', revision='fd981100305a0e4291f93a9ad169c6d9f7bed54a', local_dir='${OPENVOICE_MODEL_DIR}/checkpoints_v2', allow_patterns=['converter/*']); print('OpenVoice V2 downloaded')" \
     && test -f "${OPENVOICE_MODEL_DIR}/checkpoints_v2/converter/config.json" \
     && test -f "${OPENVOICE_MODEL_DIR}/checkpoints_v2/converter/checkpoint.pth" \
     && echo "OpenVoice V2 converter checkpoint ready"
