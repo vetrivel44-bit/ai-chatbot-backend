@@ -11,7 +11,6 @@ const server = app.listen(PORT, "0.0.0.0", () => {
   logger.info("server.started.production", {
     port: PORT,
     env: config.nodeEnv,
-    groqKey: process.env.GROQ_API_KEY ? "✅ configured" : "⚠️ missing",
     mongodb: "removed (offline mode)",
   });
 });
