@@ -7,11 +7,10 @@ from pathlib import Path
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from huggingface_hub import snapshot_download
 from openvoice import se_extractor
 from openvoice.api import ToneColorConverter
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.0.0")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.1.0")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
 DEMUCS_MODEL = os.getenv("DEMUCS_MODEL", "mdx_q")
@@ -21,32 +20,32 @@ _converter = None
 _device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def ensure_openvoice_model() -> Path:
-    converter_dir = MODEL_DIR / "converter"
-    if (converter_dir / "config.json").exists() and (converter_dir / "checkpoint.pth").exists():
-        return converter_dir
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id="myshell-ai/OpenVoiceV2",
-        local_dir=str(MODEL_DIR),
-        allow_patterns=["converter/*"],
-    )
-    return converter_dir
+def converter_dir() -> Path:
+    # Official OpenVoice V2 archive extracts to checkpoints_v2/converter.
+    return MODEL_DIR / "checkpoints_v2" / "converter"
 
 
 def get_converter() -> ToneColorConverter:
     global _converter
     if _converter is None:
-        converter_dir = ensure_openvoice_model()
-        _converter = ToneColorConverter(str(converter_dir / "config.json"), device=_device)
-        _converter.load_ckpt(str(converter_dir / "checkpoint.pth"))
+        cdir = converter_dir()
+        config = cdir / "config.json"
+        ckpt = cdir / "checkpoint.pth"
+        if not config.exists() or not ckpt.exists():
+            raise RuntimeError(
+                f"OpenVoice model files are missing at {cdir}. "
+                "Redeploy the latest voice-worker image so the V2 checkpoint is baked in."
+            )
+        _converter = ToneColorConverter(str(config), device=_device)
+        _converter.load_ckpt(str(ckpt))
     return _converter
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], stage: str) -> None:
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode != 0:
-        raise RuntimeError(result.stdout[-5000:] if result.stdout else "Audio command failed")
+        output = (result.stdout or "Audio command failed")[-5000:]
+        raise RuntimeError(f"{stage} failed: {output}")
 
 
 def safe_suffix(filename: str | None, default: str) -> str:
@@ -69,12 +68,12 @@ async def save_upload(upload: UploadFile, path: Path) -> None:
             out.write(chunk)
 
 
-def normalize_to_wav(source: Path, target: Path) -> None:
+def normalize_to_wav(source: Path, target: Path, label: str) -> None:
     run([
         "ffmpeg", "-y", "-i", str(source),
         "-ac", "1", "-ar", "44100",
         str(target),
-    ])
+    ], f"{label} normalization")
 
 
 def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
@@ -86,30 +85,44 @@ def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
         "--two-stems", "vocals",
         "-o", str(out_dir),
         str(song_wav),
-    ])
+    ], "Demucs separation")
     stem_dir = out_dir / DEMUCS_MODEL / song_wav.stem
     vocals = stem_dir / "vocals.wav"
     instrumental = stem_dir / "no_vocals.wav"
     if not vocals.exists() or not instrumental.exists():
-        raise RuntimeError("Demucs did not return vocals and instrumental stems")
+        raise RuntimeError("Demucs separation failed: vocals/no_vocals stems were not created")
     return vocals, instrumental
 
 
 def convert_tone(vocals: Path, reference: Path, output: Path, work: Path) -> None:
-    converter = get_converter()
+    try:
+        converter = get_converter()
+    except Exception as exc:
+        raise RuntimeError(f"OpenVoice model load failed: {exc}") from exc
+
     processed = work / "processed"
     processed.mkdir(parents=True, exist_ok=True)
 
-    # OpenVoice's converter changes tone colour while retaining the source audio's timing/content.
-    src_se, _ = se_extractor.get_se(str(vocals), converter, target_dir=str(processed / "source"), vad=True)
-    tgt_se, _ = se_extractor.get_se(str(reference), converter, target_dir=str(processed / "target"), vad=True)
-    converter.convert(
-        audio_src_path=str(vocals),
-        src_se=src_se,
-        tgt_se=tgt_se,
-        output_path=str(output),
-        message="@VetroAI",
-    )
+    try:
+        src_se, _ = se_extractor.get_se(str(vocals), converter, target_dir=str(processed / "source"), vad=True)
+    except Exception as exc:
+        raise RuntimeError(f"OpenVoice source-voice extraction failed: {exc}") from exc
+
+    try:
+        tgt_se, _ = se_extractor.get_se(str(reference), converter, target_dir=str(processed / "target"), vad=True)
+    except Exception as exc:
+        raise RuntimeError(f"OpenVoice reference-voice extraction failed: {exc}") from exc
+
+    try:
+        converter.convert(
+            audio_src_path=str(vocals),
+            src_se=src_se,
+            tgt_se=tgt_se,
+            output_path=str(output),
+            message="@VetroAI",
+        )
+    except Exception as exc:
+        raise RuntimeError(f"OpenVoice conversion failed: {exc}") from exc
 
 
 def mix_tracks(converted_vocals: Path, instrumental: Path, output: Path, fmt: str) -> None:
@@ -122,7 +135,7 @@ def mix_tracks(converted_vocals: Path, instrumental: Path, output: Path, fmt: st
         "-map", "[a]",
         *codec,
         str(output),
-    ])
+    ], "Final mix")
 
 
 @app.get("/")
@@ -130,14 +143,22 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
+        "version": "1.1.0",
         "device": _device,
         "demucsModel": DEMUCS_MODEL,
+        "openVoiceConverterReady": (converter_dir() / "config.json").exists() and (converter_dir() / "checkpoint.pth").exists(),
     }
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "device": _device}
+    cdir = converter_dir()
+    return {
+        "ok": True,
+        "device": _device,
+        "demucsModel": DEMUCS_MODEL,
+        "openVoiceConverterReady": (cdir / "config.json").exists() and (cdir / "checkpoint.pth").exists(),
+    }
 
 
 @app.post("/process")
@@ -159,8 +180,8 @@ async def process_cover(
 
         song_wav = temp_dir / "song.wav"
         reference_wav = temp_dir / "reference.wav"
-        normalize_to_wav(song_in, song_wav)
-        normalize_to_wav(voice_in, reference_wav)
+        normalize_to_wav(song_in, song_wav, "Song")
+        normalize_to_wav(voice_in, reference_wav, "Reference voice")
 
         vocals, instrumental = separate_vocals(song_wav, temp_dir)
         converted = temp_dir / "converted.wav"
@@ -170,7 +191,6 @@ async def process_cover(
         mix_tracks(converted, instrumental, final_path, fmt)
 
         media_type = "audio/wav" if fmt == "wav" else "audio/mpeg"
-        # FileResponse needs the temp directory to remain until the response is sent.
         response = FileResponse(
             path=str(final_path),
             media_type=media_type,
@@ -182,6 +202,7 @@ async def process_cover(
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise
     except Exception as exc:
+        print(f"[voice-cover] processing failed: {exc}", flush=True)
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
