@@ -7,7 +7,7 @@ const logger = require("./backend/src/utils/logger");
 
 const PORT = process.env.PORT || config.port || 3000;
 
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   logger.info("server.started.production", {
     port: PORT,
     env: config.nodeEnv,
@@ -15,3 +15,9 @@ app.listen(PORT, "0.0.0.0", () => {
     mongodb: "removed (offline mode)",
   });
 });
+
+// Keep the Node server's connection timings friendly to Render's proxy and to
+// long voice-worker responses. headersTimeout must stay above keepAliveTimeout.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+server.requestTimeout = 0;
