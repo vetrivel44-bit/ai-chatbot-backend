@@ -1,3 +1,4 @@
+import ctypes
 import gc
 import os
 import shutil
@@ -8,11 +9,11 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.4.0")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.4.1")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
 MAX_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(50 * 1024 * 1024)))
-CHUNK_SECONDS = max(2, int(os.getenv("VOICE_CHUNK_SECONDS", "4")))
+CHUNK_SECONDS = max(2, int(os.getenv("VOICE_CHUNK_SECONDS", "2")))
 _device = "cpu"
 _converter = None
 
@@ -21,10 +22,33 @@ def converter_dir() -> Path:
     return MODEL_DIR / "checkpoints_v2" / "converter"
 
 
+def rss_mb() -> float:
+    try:
+        with open("/proc/self/status", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024.0
+    except Exception:
+        pass
+    return -1.0
+
+
+def log_memory(stage: str) -> None:
+    print(f"[memory] {stage}: rss={rss_mb():.1f} MB", flush=True)
+
+
+def trim_memory() -> None:
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
 def get_converter():
     global _converter
     if _converter is None:
-        # Import torch/OpenVoice only after FFmpeg stem extraction has finished.
+        log_memory("before torch import")
         import torch
         torch.set_grad_enabled(False)
         torch.set_num_threads(1)
@@ -32,6 +56,7 @@ def get_converter():
             torch.set_num_interop_threads(1)
         except RuntimeError:
             pass
+        log_memory("after torch import")
 
         from openvoice.api import OpenVoiceBaseClass, ToneColorConverter
 
@@ -46,7 +71,34 @@ def get_converter():
         OpenVoiceBaseClass.__init__(converter, str(config), device=_device)
         converter.watermark_model = None
         converter.version = getattr(converter.hps, "_version_", "v1")
-        converter.load_ckpt(str(ckpt))
+        log_memory("after OpenVoice model init")
+
+        # The official OpenVoice V2 checkpoint is ~131 MB. The stock loader
+        # materializes the whole checkpoint while a full randomly initialized
+        # model is already in RAM, causing a large temporary peak on 512 MB
+        # instances. mmap=True keeps checkpoint storage file-backed, while
+        # assign=True replaces model parameters instead of copying them.
+        try:
+            checkpoint = torch.load(
+                str(ckpt),
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
+            )
+            state = checkpoint["model"] if isinstance(checkpoint, dict) and "model" in checkpoint else checkpoint
+            incompatible = converter.model.load_state_dict(state, strict=False, assign=True)
+            print(
+                "Loaded OpenVoice checkpoint with mmap; "
+                f"missing={len(incompatible.missing_keys)} unexpected={len(incompatible.unexpected_keys)}",
+                flush=True,
+            )
+            del state
+            del checkpoint
+            trim_memory()
+            log_memory("after mmap checkpoint load")
+        except Exception as exc:
+            raise RuntimeError(f"Low-memory OpenVoice checkpoint load failed: {exc}") from exc
+
         _converter = converter
     return _converter
 
@@ -54,7 +106,8 @@ def get_converter():
 def unload_converter() -> None:
     global _converter
     _converter = None
-    gc.collect()
+    trim_memory()
+    log_memory("after converter unload")
 
 
 def run(cmd: list[str], stage: str) -> str:
@@ -86,7 +139,6 @@ async def save_upload(upload: UploadFile, path: Path) -> None:
 
 
 def normalize_song(source: Path, target: Path) -> None:
-    # Preserve stereo because the free-tier stem method uses mid/side information.
     run([
         "ffmpeg", "-y", "-i", str(source),
         "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", str(target),
@@ -101,12 +153,6 @@ def normalize_reference(source: Path, target: Path) -> None:
 
 
 def separate_vocals_lite(song_wav: Path, work: Path) -> tuple[Path, Path]:
-    """Low-memory vocal approximation for Render's 512 MB free instance.
-
-    The center (mid) channel is used as the vocal candidate. The instrumental is
-    built mostly from the stereo side signal, with a quiet low-frequency copy of
-    the original mixed back in so centered bass is not completely lost.
-    """
     vocals = work / "vocals-lite.wav"
     instrumental = work / "instrumental-lite.wav"
     filters = (
@@ -142,7 +188,7 @@ def split_wav(source: Path, out_dir: Path, seconds: int = CHUNK_SECONDS) -> list
 
 
 def representative_chunk(source: Path, out_dir: Path) -> Path:
-    chunks = split_wav(source, out_dir, seconds=6)
+    chunks = split_wav(source, out_dir, seconds=3)
     return chunks[len(chunks) // 2]
 
 
@@ -150,7 +196,8 @@ def extract_embedding(converter, source: Path, out_dir: Path, label: str):
     try:
         ref = representative_chunk(source, out_dir)
         embedding = converter.extract_se(str(ref))
-        gc.collect()
+        trim_memory()
+        log_memory(f"after {label} embedding")
         return embedding
     except Exception as exc:
         raise RuntimeError(f"OpenVoice {label} embedding failed: {exc}") from exc
@@ -195,7 +242,9 @@ def convert_tone(vocals: Path, reference: Path, output: Path, work: Path) -> Non
                 f"OpenVoice conversion failed on chunk {index + 1}/{len(source_chunks)}: {exc}"
             ) from exc
         converted_chunks.append(converted_chunk)
-        gc.collect()
+        trim_memory()
+        if index == 0 or (index + 1) % 10 == 0:
+            log_memory(f"after conversion chunk {index + 1}/{len(source_chunks)}")
 
     concat_wavs(converted_chunks, output, work)
 
@@ -216,10 +265,11 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
-        "version": "1.4.0",
+        "version": "1.4.1",
         "device": _device,
         "stemMode": "ffmpeg-lite",
         "chunkSeconds": CHUNK_SECONDS,
+        "rssMb": round(rss_mb(), 1),
         "openVoiceConverterReady": (converter_dir() / "config.json").exists() and (converter_dir() / "checkpoint.pth").exists(),
     }
 
@@ -229,9 +279,10 @@ def health():
     cdir = converter_dir()
     return {
         "ok": True,
-        "version": "1.4.0",
+        "version": "1.4.1",
         "device": _device,
         "stemMode": "ffmpeg-lite",
+        "rssMb": round(rss_mb(), 1),
         "openVoiceConverterReady": (cdir / "config.json").exists() and (cdir / "checkpoint.pth").exists(),
     }
 
@@ -247,23 +298,29 @@ async def process_cover(
         raise HTTPException(status_code=400, detail="output_format must be mp3 or wav")
 
     temp_dir = Path(tempfile.mkdtemp(prefix="vetro-cover-"))
+    log_memory("request start")
     try:
         song_in = temp_dir / f"song{safe_suffix(song.filename, '.mp3')}"
         voice_in = temp_dir / f"reference{safe_suffix(reference_voice.filename, '.wav')}"
         await save_upload(song, song_in)
         await save_upload(reference_voice, voice_in)
+        log_memory("after uploads")
 
         song_wav = temp_dir / "song.wav"
         reference_wav = temp_dir / "reference.wav"
         normalize_song(song_in, song_wav)
         normalize_reference(voice_in, reference_wav)
+        log_memory("after normalization")
 
         vocals, instrumental = separate_vocals_lite(song_wav, temp_dir)
+        log_memory("after FFmpeg lite stems")
+
         converted = temp_dir / "converted.wav"
         convert_tone(vocals, reference_wav, converted, temp_dir)
 
         final_path = temp_dir / f"voice-cover.{fmt}"
         mix_tracks(converted, instrumental, final_path, fmt)
+        log_memory("after final mix")
 
         media_type = "audio/wav" if fmt == "wav" else "audio/mpeg"
         response = FileResponse(
