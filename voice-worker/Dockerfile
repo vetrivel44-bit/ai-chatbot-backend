@@ -6,7 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=10000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg git build-essential libsndfile1 \
+    ffmpeg git build-essential pkg-config libsndfile1 \
+    libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \
+    libavutil-dev libswresample-dev libswscale-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
