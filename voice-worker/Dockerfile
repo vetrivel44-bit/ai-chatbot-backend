@@ -1,6 +1,6 @@
 FROM python:3.10-slim-bullseye
 
-# Cache-bust marker: hf-openvoice-v2-diffq-20260829
+# Cache-bust marker: cpu-openvoice-demucs-20260829
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -18,26 +18,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 
-# OpenVoice's older librosa/faster-whisper stack expects pkg_resources and
-# PyAV 10 expects pre-Cython-3 build semantics. Pin both explicitly.
+# Install a CPU-only torch stack before the remaining packages. Render's free
+# worker has no GPU, so downloading CUDA/NVIDIA packages only wastes disk and
+# memory. The pinned OpenVoice/PyAV stack also needs legacy setuptools/Cython.
 RUN pip install --upgrade "pip<26" wheel \
     && pip install "setuptools==70.3.0" "Cython<3" \
-    && python -c "import pkg_resources; print('pkg_resources OK')" \
+    && pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.5.1" "torchaudio==2.5.1" \
+    && python -c "import torch; assert not torch.cuda.is_available(); print('CPU-only PyTorch OK', torch.__version__)" \
     && pip install --no-build-isolation -r requirements.txt \
     && pip install --force-reinstall --no-deps "setuptools==70.3.0" \
     && pip install --force-reinstall "diffq==0.2.4" \
-    && python -c "import pkg_resources, librosa, diffq; print('OpenVoice runtime + DiffQ OK')"
+    && python -c "import pkg_resources, librosa, diffq, torch; print('OpenVoice runtime + DiffQ + CPU torch OK', torch.__version__)"
 
-# The old MyShell S3 archive URL now returns 404. The official V2 converter
-# is available from myshell-ai/OpenVoiceV2 on Hugging Face. Download only the
-# converter files and place them in the layout expected by app.py.
 RUN mkdir -p "${OPENVOICE_MODEL_DIR}/checkpoints_v2" \
     && python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='myshell-ai/OpenVoiceV2', revision='fd981100305a0e4291f93a9ad169c6d9f7bed54a', local_dir='${OPENVOICE_MODEL_DIR}/checkpoints_v2', allow_patterns=['converter/*']); print('OpenVoice V2 downloaded')" \
     && test -f "${OPENVOICE_MODEL_DIR}/checkpoints_v2/converter/config.json" \
     && test -f "${OPENVOICE_MODEL_DIR}/checkpoints_v2/converter/checkpoint.pth" \
     && echo "OpenVoice V2 converter checkpoint ready"
 
-# Cache the quantized Demucs model only after DiffQ has been verified.
 RUN python -c "import diffq; from demucs.pretrained import get_model; get_model('${DEMUCS_MODEL}'); print('Demucs model cached')"
 
 COPY app.py .
