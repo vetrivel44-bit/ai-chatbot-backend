@@ -1,6 +1,6 @@
 FROM python:3.10-slim-bullseye
 
-# Cache-bust marker: hf-openvoice-v2-20260829
+# Cache-bust marker: hf-openvoice-v2-diffq-20260829
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -25,7 +25,8 @@ RUN pip install --upgrade "pip<26" wheel \
     && python -c "import pkg_resources; print('pkg_resources OK')" \
     && pip install --no-build-isolation -r requirements.txt \
     && pip install --force-reinstall --no-deps "setuptools==70.3.0" \
-    && python -c "import pkg_resources, librosa; print('OpenVoice runtime dependencies OK')"
+    && pip install --force-reinstall "diffq==0.2.4" \
+    && python -c "import pkg_resources, librosa, diffq; print('OpenVoice runtime + DiffQ OK')"
 
 # The old MyShell S3 archive URL now returns 404. The official V2 converter
 # is available from myshell-ai/OpenVoiceV2 on Hugging Face. Download only the
@@ -36,8 +37,8 @@ RUN mkdir -p "${OPENVOICE_MODEL_DIR}/checkpoints_v2" \
     && test -f "${OPENVOICE_MODEL_DIR}/checkpoints_v2/converter/checkpoint.pth" \
     && echo "OpenVoice V2 converter checkpoint ready"
 
-# Cache the Demucs stem-separation weights in the Docker image as well.
-RUN python -c "from demucs.pretrained import get_model; get_model('${DEMUCS_MODEL}'); print('Demucs model cached')"
+# Cache the quantized Demucs model only after DiffQ has been verified.
+RUN python -c "import diffq; from demucs.pretrained import get_model; get_model('${DEMUCS_MODEL}'); print('Demucs model cached')"
 
 COPY app.py .
 
