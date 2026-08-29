@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.4.1")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.4.2")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
 MAX_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(50 * 1024 * 1024)))
@@ -66,18 +66,12 @@ def get_converter():
         if not config.exists() or not ckpt.exists():
             raise RuntimeError(f"OpenVoice model files are missing at {cdir}")
 
-        # Avoid ToneColorConverter's optional wavmark model to save RAM.
         converter = ToneColorConverter.__new__(ToneColorConverter)
         OpenVoiceBaseClass.__init__(converter, str(config), device=_device)
         converter.watermark_model = None
         converter.version = getattr(converter.hps, "_version_", "v1")
         log_memory("after OpenVoice model init")
 
-        # The official OpenVoice V2 checkpoint is ~131 MB. The stock loader
-        # materializes the whole checkpoint while a full randomly initialized
-        # model is already in RAM, causing a large temporary peak on 512 MB
-        # instances. mmap=True keeps checkpoint storage file-backed, while
-        # assign=True replaces model parameters instead of copying them.
         try:
             checkpoint = torch.load(
                 str(ckpt),
@@ -155,12 +149,14 @@ def normalize_reference(source: Path, target: Path) -> None:
 def separate_vocals_lite(song_wav: Path, work: Path) -> tuple[Path, Path]:
     vocals = work / "vocals-lite.wav"
     instrumental = work / "instrumental-lite.wav"
+    # FFmpeg 4.3 (Debian bullseye) does not support amix's normalize option.
+    # Keep compatible options only; apply a small output gain after amix.
     filters = (
         "[0:a]asplit=3[mid][sidein][bass];"
         "[mid]pan=mono|c0=0.5*c0+0.5*c1,highpass=f=90,lowpass=f=12000[v];"
         "[sidein]pan=stereo|c0=c0-c1|c1=c1-c0,volume=0.65[s];"
         "[bass]lowpass=f=180,volume=0.20[b];"
-        "[s][b]amix=inputs=2:duration=longest:normalize=0[i]"
+        "[s][b]amix=inputs=2:duration=longest:dropout_transition=0,volume=1.6[i]"
     )
     run([
         "ffmpeg", "-y", "-i", str(song_wav),
@@ -265,7 +261,7 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
-        "version": "1.4.1",
+        "version": "1.4.2",
         "device": _device,
         "stemMode": "ffmpeg-lite",
         "chunkSeconds": CHUNK_SECONDS,
@@ -279,7 +275,7 @@ def health():
     cdir = converter_dir()
     return {
         "ok": True,
-        "version": "1.4.1",
+        "version": "1.4.2",
         "device": _device,
         "stemMode": "ffmpeg-lite",
         "rssMb": round(rss_mb(), 1),
