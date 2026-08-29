@@ -2,6 +2,7 @@ fastapi==0.116.1
 uvicorn[standard]==0.35.0
 python-multipart==0.0.20
 demucs==4.0.1
+diffq==0.2.4
 huggingface-hub==0.34.4
 # OpenVoice's package metadata is named myshell-openvoice.
 myshell-openvoice @ git+https://github.com/myshell-ai/OpenVoice.git@74a1d147b17a8c3092dd5430504bd83ef6c7eb23
