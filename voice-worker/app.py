@@ -8,12 +8,13 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.2.0")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.3.0")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
 DEMUCS_MODEL = os.getenv("DEMUCS_MODEL", "mdx_q")
+DEMUCS_SEGMENT_SECONDS = int(os.getenv("DEMUCS_SEGMENT_SECONDS", "10"))
 MAX_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(50 * 1024 * 1024)))
-CHUNK_SECONDS = int(os.getenv("VOICE_CHUNK_SECONDS", "15"))
+CHUNK_SECONDS = int(os.getenv("VOICE_CHUNK_SECONDS", "10"))
 _device = os.getenv("VOICE_DEVICE", "cpu")
 _converter = None
 
@@ -25,17 +26,25 @@ def converter_dir() -> Path:
 def get_converter():
     global _converter
     if _converter is None:
-        # Lazy import is deliberate: keep the FastAPI parent process light while
-        # Demucs runs in a separate subprocess on small Render instances.
-        from openvoice.api import ToneColorConverter
+        # Lazy import keeps the parent process lighter while Demucs runs.
+        # We intentionally bypass ToneColorConverter.__init__ because the pinned
+        # OpenVoice version forwards enable_watermark to its base constructor,
+        # which does not accept that keyword. Initializing the base class directly
+        # also avoids loading the unnecessary wavmark model into RAM.
+        from openvoice.api import OpenVoiceBaseClass, ToneColorConverter
 
         cdir = converter_dir()
         config = cdir / "config.json"
         ckpt = cdir / "checkpoint.pth"
         if not config.exists() or not ckpt.exists():
             raise RuntimeError(f"OpenVoice model files are missing at {cdir}")
-        _converter = ToneColorConverter(str(config), device=_device, enable_watermark=False)
-        _converter.load_ckpt(str(ckpt))
+
+        converter = ToneColorConverter.__new__(ToneColorConverter)
+        OpenVoiceBaseClass.__init__(converter, str(config), device=_device)
+        converter.watermark_model = None
+        converter.version = getattr(converter.hps, "_version_", "v1")
+        converter.load_ckpt(str(ckpt))
+        _converter = converter
     return _converter
 
 
@@ -88,6 +97,7 @@ def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
         "-d", _device,
         "-n", DEMUCS_MODEL,
         "--two-stems", "vocals",
+        "--segment", str(DEMUCS_SEGMENT_SECONDS),
         "--shifts", "0",
         "--jobs", "1",
         "-o", str(out_dir),
@@ -120,7 +130,6 @@ def representative_chunks(source: Path, out_dir: Path, max_chunks: int = 3) -> l
     chunks = split_wav(source, out_dir, seconds=10)
     if len(chunks) <= max_chunks:
         return chunks
-    # Sample beginning, middle and end rather than embedding the whole track.
     picks = [0, len(chunks) // 2, len(chunks) - 1]
     return [chunks[i] for i in picks[:max_chunks]]
 
@@ -191,9 +200,10 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "device": _device,
         "demucsModel": DEMUCS_MODEL,
+        "demucsSegmentSeconds": DEMUCS_SEGMENT_SECONDS,
         "chunkSeconds": CHUNK_SECONDS,
         "openVoiceConverterReady": (converter_dir() / "config.json").exists() and (converter_dir() / "checkpoint.pth").exists(),
     }
@@ -204,8 +214,9 @@ def health():
     cdir = converter_dir()
     return {
         "ok": True,
-        "version": "1.2.0",
+        "version": "1.3.0",
         "device": _device,
+        "demucsModel": DEMUCS_MODEL,
         "openVoiceConverterReady": (cdir / "config.json").exists() and (cdir / "checkpoint.pth").exists(),
     }
 
@@ -232,7 +243,6 @@ async def process_cover(
         normalize_to_wav(song_in, song_wav, "Song")
         normalize_to_wav(voice_in, reference_wav, "Reference voice")
 
-        # Keep the parent process lightweight until the Demucs subprocess exits.
         vocals, instrumental = separate_vocals(song_wav, temp_dir)
 
         converted = temp_dir / "converted.wav"
