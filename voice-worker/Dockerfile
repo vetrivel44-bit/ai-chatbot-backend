@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.10-slim-bullseye
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -13,7 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+
+# OpenVoice currently pulls faster-whisper 0.9 -> PyAV 10.x, which is not
+# compatible with Cython 3's stricter noexcept callback typing. Use the
+# legacy build toolchain expected by that dependency stack.
+RUN pip install --upgrade "pip<26" wheel \
+    && pip install "setuptools<81" "Cython<3" \
+    && pip install --no-build-isolation -r requirements.txt
 
 COPY app.py .
 
