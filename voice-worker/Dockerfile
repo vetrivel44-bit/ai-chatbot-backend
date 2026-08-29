@@ -14,12 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 
-# OpenVoice currently pulls faster-whisper 0.9 -> PyAV 10.x, which is not
-# compatible with Cython 3's stricter noexcept callback typing. Use the
-# legacy build toolchain expected by that dependency stack.
+# OpenVoice's older librosa/faster-whisper stack expects pkg_resources and
+# PyAV 10 expects pre-Cython-3 build semantics. Pin both explicitly.
 RUN pip install --upgrade "pip<26" wheel \
-    && pip install "setuptools<81" "Cython<3" \
-    && pip install --no-build-isolation -r requirements.txt
+    && pip install "setuptools==70.3.0" "Cython<3" \
+    && python -c "import pkg_resources; print('pkg_resources OK')" \
+    && pip install --no-build-isolation -r requirements.txt \
+    && pip install --force-reinstall --no-deps "setuptools==70.3.0" \
+    && python -c "import pkg_resources, librosa; print('OpenVoice runtime dependencies OK')"
 
 COPY app.py .
 
