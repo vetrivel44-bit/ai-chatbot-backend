@@ -8,14 +8,12 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.3.0")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.4.0")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
-DEMUCS_MODEL = os.getenv("DEMUCS_MODEL", "mdx_q")
-DEMUCS_SEGMENT_SECONDS = int(os.getenv("DEMUCS_SEGMENT_SECONDS", "10"))
 MAX_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(50 * 1024 * 1024)))
-CHUNK_SECONDS = int(os.getenv("VOICE_CHUNK_SECONDS", "10"))
-_device = os.getenv("VOICE_DEVICE", "cpu")
+CHUNK_SECONDS = max(2, int(os.getenv("VOICE_CHUNK_SECONDS", "4")))
+_device = "cpu"
 _converter = None
 
 
@@ -26,11 +24,15 @@ def converter_dir() -> Path:
 def get_converter():
     global _converter
     if _converter is None:
-        # Lazy import keeps the parent process lighter while Demucs runs.
-        # We intentionally bypass ToneColorConverter.__init__ because the pinned
-        # OpenVoice version forwards enable_watermark to its base constructor,
-        # which does not accept that keyword. Initializing the base class directly
-        # also avoids loading the unnecessary wavmark model into RAM.
+        # Import torch/OpenVoice only after FFmpeg stem extraction has finished.
+        import torch
+        torch.set_grad_enabled(False)
+        torch.set_num_threads(1)
+        try:
+            torch.set_num_interop_threads(1)
+        except RuntimeError:
+            pass
+
         from openvoice.api import OpenVoiceBaseClass, ToneColorConverter
 
         cdir = converter_dir()
@@ -39,6 +41,7 @@ def get_converter():
         if not config.exists() or not ckpt.exists():
             raise RuntimeError(f"OpenVoice model files are missing at {cdir}")
 
+        # Avoid ToneColorConverter's optional wavmark model to save RAM.
         converter = ToneColorConverter.__new__(ToneColorConverter)
         OpenVoiceBaseClass.__init__(converter, str(config), device=_device)
         converter.watermark_model = None
@@ -82,32 +85,45 @@ async def save_upload(upload: UploadFile, path: Path) -> None:
             out.write(chunk)
 
 
-def normalize_to_wav(source: Path, target: Path, label: str) -> None:
+def normalize_song(source: Path, target: Path) -> None:
+    # Preserve stereo because the free-tier stem method uses mid/side information.
     run([
         "ffmpeg", "-y", "-i", str(source),
-        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le",
-        str(target),
-    ], f"{label} normalization")
+        "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", str(target),
+    ], "Song normalization")
 
 
-def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
-    out_dir = work / "separated"
+def normalize_reference(source: Path, target: Path) -> None:
     run([
-        "python", "-m", "demucs.separate",
-        "-d", _device,
-        "-n", DEMUCS_MODEL,
-        "--two-stems", "vocals",
-        "--segment", str(DEMUCS_SEGMENT_SECONDS),
-        "--shifts", "0",
-        "--jobs", "1",
-        "-o", str(out_dir),
-        str(song_wav),
-    ], "Demucs separation")
-    stem_dir = out_dir / DEMUCS_MODEL / song_wav.stem
-    vocals = stem_dir / "vocals.wav"
-    instrumental = stem_dir / "no_vocals.wav"
+        "ffmpeg", "-y", "-i", str(source),
+        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", str(target),
+    ], "Reference voice normalization")
+
+
+def separate_vocals_lite(song_wav: Path, work: Path) -> tuple[Path, Path]:
+    """Low-memory vocal approximation for Render's 512 MB free instance.
+
+    The center (mid) channel is used as the vocal candidate. The instrumental is
+    built mostly from the stereo side signal, with a quiet low-frequency copy of
+    the original mixed back in so centered bass is not completely lost.
+    """
+    vocals = work / "vocals-lite.wav"
+    instrumental = work / "instrumental-lite.wav"
+    filters = (
+        "[0:a]asplit=3[mid][sidein][bass];"
+        "[mid]pan=mono|c0=0.5*c0+0.5*c1,highpass=f=90,lowpass=f=12000[v];"
+        "[sidein]pan=stereo|c0=c0-c1|c1=c1-c0,volume=0.65[s];"
+        "[bass]lowpass=f=180,volume=0.20[b];"
+        "[s][b]amix=inputs=2:duration=longest:normalize=0[i]"
+    )
+    run([
+        "ffmpeg", "-y", "-i", str(song_wav),
+        "-filter_complex", filters,
+        "-map", "[v]", "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", str(vocals),
+        "-map", "[i]", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", str(instrumental),
+    ], "FFmpeg lite stem separation")
     if not vocals.exists() or not instrumental.exists():
-        raise RuntimeError("Demucs separation failed: vocals/no_vocals stems were not created")
+        raise RuntimeError("FFmpeg lite separation did not create both tracks")
     return vocals, instrumental
 
 
@@ -117,8 +133,7 @@ def split_wav(source: Path, out_dir: Path, seconds: int = CHUNK_SECONDS) -> list
     run([
         "ffmpeg", "-y", "-i", str(source),
         "-f", "segment", "-segment_time", str(seconds), "-reset_timestamps", "1",
-        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le",
-        str(pattern),
+        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", str(pattern),
     ], "Audio chunking")
     chunks = sorted(out_dir.glob("chunk-*.wav"))
     if not chunks:
@@ -126,18 +141,17 @@ def split_wav(source: Path, out_dir: Path, seconds: int = CHUNK_SECONDS) -> list
     return chunks
 
 
-def representative_chunks(source: Path, out_dir: Path, max_chunks: int = 3) -> list[Path]:
-    chunks = split_wav(source, out_dir, seconds=10)
-    if len(chunks) <= max_chunks:
-        return chunks
-    picks = [0, len(chunks) // 2, len(chunks) - 1]
-    return [chunks[i] for i in picks[:max_chunks]]
+def representative_chunk(source: Path, out_dir: Path) -> Path:
+    chunks = split_wav(source, out_dir, seconds=6)
+    return chunks[len(chunks) // 2]
 
 
 def extract_embedding(converter, source: Path, out_dir: Path, label: str):
     try:
-        refs = representative_chunks(source, out_dir)
-        return converter.extract_se([str(p) for p in refs])
+        ref = representative_chunk(source, out_dir)
+        embedding = converter.extract_se(str(ref))
+        gc.collect()
+        return embedding
     except Exception as exc:
         raise RuntimeError(f"OpenVoice {label} embedding failed: {exc}") from exc
 
@@ -177,7 +191,9 @@ def convert_tone(vocals: Path, reference: Path, output: Path, work: Path) -> Non
                 message="@VetroAI",
             )
         except Exception as exc:
-            raise RuntimeError(f"OpenVoice conversion failed on chunk {index + 1}/{len(source_chunks)}: {exc}") from exc
+            raise RuntimeError(
+                f"OpenVoice conversion failed on chunk {index + 1}/{len(source_chunks)}: {exc}"
+            ) from exc
         converted_chunks.append(converted_chunk)
         gc.collect()
 
@@ -200,10 +216,9 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "device": _device,
-        "demucsModel": DEMUCS_MODEL,
-        "demucsSegmentSeconds": DEMUCS_SEGMENT_SECONDS,
+        "stemMode": "ffmpeg-lite",
         "chunkSeconds": CHUNK_SECONDS,
         "openVoiceConverterReady": (converter_dir() / "config.json").exists() and (converter_dir() / "checkpoint.pth").exists(),
     }
@@ -214,9 +229,9 @@ def health():
     cdir = converter_dir()
     return {
         "ok": True,
-        "version": "1.3.0",
+        "version": "1.4.0",
         "device": _device,
-        "demucsModel": DEMUCS_MODEL,
+        "stemMode": "ffmpeg-lite",
         "openVoiceConverterReady": (cdir / "config.json").exists() and (cdir / "checkpoint.pth").exists(),
     }
 
@@ -240,11 +255,10 @@ async def process_cover(
 
         song_wav = temp_dir / "song.wav"
         reference_wav = temp_dir / "reference.wav"
-        normalize_to_wav(song_in, song_wav, "Song")
-        normalize_to_wav(voice_in, reference_wav, "Reference voice")
+        normalize_song(song_in, song_wav)
+        normalize_reference(voice_in, reference_wav)
 
-        vocals, instrumental = separate_vocals(song_wav, temp_dir)
-
+        vocals, instrumental = separate_vocals_lite(song_wav, temp_dir)
         converted = temp_dir / "converted.wav"
         convert_tone(vocals, reference_wav, converted, temp_dir)
 
