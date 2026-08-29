@@ -1,51 +1,56 @@
+import gc
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from openvoice import se_extractor
-from openvoice.api import ToneColorConverter
 
-app = FastAPI(title="VetroAI Voice Cover Worker", version="1.1.0")
+app = FastAPI(title="VetroAI Voice Cover Worker", version="1.2.0")
 
 MODEL_DIR = Path(os.getenv("OPENVOICE_MODEL_DIR", "/opt/models/openvoice-v2"))
 DEMUCS_MODEL = os.getenv("DEMUCS_MODEL", "mdx_q")
 MAX_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(50 * 1024 * 1024)))
-
+CHUNK_SECONDS = int(os.getenv("VOICE_CHUNK_SECONDS", "15"))
+_device = os.getenv("VOICE_DEVICE", "cpu")
 _converter = None
-_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def converter_dir() -> Path:
-    # Official OpenVoice V2 archive extracts to checkpoints_v2/converter.
     return MODEL_DIR / "checkpoints_v2" / "converter"
 
 
-def get_converter() -> ToneColorConverter:
+def get_converter():
     global _converter
     if _converter is None:
+        # Lazy import is deliberate: keep the FastAPI parent process light while
+        # Demucs runs in a separate subprocess on small Render instances.
+        from openvoice.api import ToneColorConverter
+
         cdir = converter_dir()
         config = cdir / "config.json"
         ckpt = cdir / "checkpoint.pth"
         if not config.exists() or not ckpt.exists():
-            raise RuntimeError(
-                f"OpenVoice model files are missing at {cdir}. "
-                "Redeploy the latest voice-worker image so the V2 checkpoint is baked in."
-            )
-        _converter = ToneColorConverter(str(config), device=_device)
+            raise RuntimeError(f"OpenVoice model files are missing at {cdir}")
+        _converter = ToneColorConverter(str(config), device=_device, enable_watermark=False)
         _converter.load_ckpt(str(ckpt))
     return _converter
 
 
-def run(cmd: list[str], stage: str) -> None:
+def unload_converter() -> None:
+    global _converter
+    _converter = None
+    gc.collect()
+
+
+def run(cmd: list[str], stage: str) -> str:
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode != 0:
         output = (result.stdout or "Audio command failed")[-5000:]
         raise RuntimeError(f"{stage} failed: {output}")
+    return result.stdout or ""
 
 
 def safe_suffix(filename: str | None, default: str) -> str:
@@ -71,7 +76,7 @@ async def save_upload(upload: UploadFile, path: Path) -> None:
 def normalize_to_wav(source: Path, target: Path, label: str) -> None:
     run([
         "ffmpeg", "-y", "-i", str(source),
-        "-ac", "1", "-ar", "44100",
+        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le",
         str(target),
     ], f"{label} normalization")
 
@@ -83,6 +88,8 @@ def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
         "-d", _device,
         "-n", DEMUCS_MODEL,
         "--two-stems", "vocals",
+        "--shifts", "0",
+        "--jobs", "1",
         "-o", str(out_dir),
         str(song_wav),
     ], "Demucs separation")
@@ -94,35 +101,78 @@ def separate_vocals(song_wav: Path, work: Path) -> tuple[Path, Path]:
     return vocals, instrumental
 
 
+def split_wav(source: Path, out_dir: Path, seconds: int = CHUNK_SECONDS) -> list[Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pattern = out_dir / "chunk-%03d.wav"
+    run([
+        "ffmpeg", "-y", "-i", str(source),
+        "-f", "segment", "-segment_time", str(seconds), "-reset_timestamps", "1",
+        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le",
+        str(pattern),
+    ], "Audio chunking")
+    chunks = sorted(out_dir.glob("chunk-*.wav"))
+    if not chunks:
+        raise RuntimeError("Audio chunking failed: no chunks were produced")
+    return chunks
+
+
+def representative_chunks(source: Path, out_dir: Path, max_chunks: int = 3) -> list[Path]:
+    chunks = split_wav(source, out_dir, seconds=10)
+    if len(chunks) <= max_chunks:
+        return chunks
+    # Sample beginning, middle and end rather than embedding the whole track.
+    picks = [0, len(chunks) // 2, len(chunks) - 1]
+    return [chunks[i] for i in picks[:max_chunks]]
+
+
+def extract_embedding(converter, source: Path, out_dir: Path, label: str):
+    try:
+        refs = representative_chunks(source, out_dir)
+        return converter.extract_se([str(p) for p in refs])
+    except Exception as exc:
+        raise RuntimeError(f"OpenVoice {label} embedding failed: {exc}") from exc
+
+
+def concat_wavs(chunks: list[Path], output: Path, work: Path) -> None:
+    list_file = work / "concat.txt"
+    with list_file.open("w", encoding="utf-8") as f:
+        for chunk in chunks:
+            escaped = str(chunk).replace("'", "'\\''")
+            f.write(f"file '{escaped}'\n")
+    run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+        "-ac", "1", "-ar", "44100", "-c:a", "pcm_s16le", str(output),
+    ], "Converted vocal concatenation")
+
+
 def convert_tone(vocals: Path, reference: Path, output: Path, work: Path) -> None:
     try:
         converter = get_converter()
     except Exception as exc:
         raise RuntimeError(f"OpenVoice model load failed: {exc}") from exc
 
-    processed = work / "processed"
-    processed.mkdir(parents=True, exist_ok=True)
+    src_se = extract_embedding(converter, vocals, work / "source-embedding", "source voice")
+    tgt_se = extract_embedding(converter, reference, work / "target-embedding", "reference voice")
 
-    try:
-        src_se, _ = se_extractor.get_se(str(vocals), converter, target_dir=str(processed / "source"), vad=True)
-    except Exception as exc:
-        raise RuntimeError(f"OpenVoice source-voice extraction failed: {exc}") from exc
+    source_chunks = split_wav(vocals, work / "vocal-chunks")
+    converted_chunks: list[Path] = []
+    for index, source_chunk in enumerate(source_chunks):
+        converted_chunk = work / "converted-chunks" / f"converted-{index:03d}.wav"
+        converted_chunk.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            converter.convert(
+                audio_src_path=str(source_chunk),
+                src_se=src_se,
+                tgt_se=tgt_se,
+                output_path=str(converted_chunk),
+                message="@VetroAI",
+            )
+        except Exception as exc:
+            raise RuntimeError(f"OpenVoice conversion failed on chunk {index + 1}/{len(source_chunks)}: {exc}") from exc
+        converted_chunks.append(converted_chunk)
+        gc.collect()
 
-    try:
-        tgt_se, _ = se_extractor.get_se(str(reference), converter, target_dir=str(processed / "target"), vad=True)
-    except Exception as exc:
-        raise RuntimeError(f"OpenVoice reference-voice extraction failed: {exc}") from exc
-
-    try:
-        converter.convert(
-            audio_src_path=str(vocals),
-            src_se=src_se,
-            tgt_se=tgt_se,
-            output_path=str(output),
-            message="@VetroAI",
-        )
-    except Exception as exc:
-        raise RuntimeError(f"OpenVoice conversion failed: {exc}") from exc
+    concat_wavs(converted_chunks, output, work)
 
 
 def mix_tracks(converted_vocals: Path, instrumental: Path, output: Path, fmt: str) -> None:
@@ -132,9 +182,7 @@ def mix_tracks(converted_vocals: Path, instrumental: Path, output: Path, fmt: st
         "-i", str(instrumental),
         "-i", str(converted_vocals),
         "-filter_complex", "[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]",
-        "-map", "[a]",
-        *codec,
-        str(output),
+        "-map", "[a]", *codec, str(output),
     ], "Final mix")
 
 
@@ -143,9 +191,10 @@ def root():
     return {
         "ok": True,
         "service": "VetroAI Voice Cover Worker",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "device": _device,
         "demucsModel": DEMUCS_MODEL,
+        "chunkSeconds": CHUNK_SECONDS,
         "openVoiceConverterReady": (converter_dir() / "config.json").exists() and (converter_dir() / "checkpoint.pth").exists(),
     }
 
@@ -155,8 +204,8 @@ def health():
     cdir = converter_dir()
     return {
         "ok": True,
+        "version": "1.2.0",
         "device": _device,
-        "demucsModel": DEMUCS_MODEL,
         "openVoiceConverterReady": (cdir / "config.json").exists() and (cdir / "checkpoint.pth").exists(),
     }
 
@@ -183,7 +232,9 @@ async def process_cover(
         normalize_to_wav(song_in, song_wav, "Song")
         normalize_to_wav(voice_in, reference_wav, "Reference voice")
 
+        # Keep the parent process lightweight until the Demucs subprocess exits.
         vocals, instrumental = separate_vocals(song_wav, temp_dir)
+
         converted = temp_dir / "converted.wav"
         convert_tone(vocals, reference_wav, converted, temp_dir)
 
@@ -205,6 +256,8 @@ async def process_cover(
         print(f"[voice-cover] processing failed: {exc}", flush=True)
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        unload_converter()
 
 
 class _CleanupTask:
