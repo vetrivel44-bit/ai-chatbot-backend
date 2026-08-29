@@ -1,5 +1,6 @@
 FROM python:3.10-slim-bullseye
 
+# Cache-bust marker: hf-openvoice-v2-20260829
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
