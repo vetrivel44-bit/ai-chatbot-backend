@@ -1,13 +1,21 @@
 FROM python:3.10-slim-bullseye
 
-# Cache-bust marker: cpu-openvoice-demucs-stable-20260829
+# Cache-bust marker: cpu-openvoice-demucs-lowmem-20260829
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=10000 \
     OPENVOICE_MODEL_DIR=/opt/models/openvoice-v2 \
     DEMUCS_MODEL=mdx_q \
-    HF_HUB_DISABLE_XET=1
+    DEMUCS_SEGMENT_SECONDS=4 \
+    VOICE_CHUNK_SECONDS=6 \
+    HF_HUB_DISABLE_XET=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    MALLOC_ARENA_MAX=2
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg git build-essential pkg-config libsndfile1 \
@@ -41,4 +49,4 @@ RUN python -c "import diffq; from demucs.pretrained import get_model; get_model(
 COPY app.py .
 
 EXPOSE 10000
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-10000} --workers 1"]
