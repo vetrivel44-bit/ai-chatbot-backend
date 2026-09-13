@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bullseye
+FROM python:3.10-slim-bookworm
 
 # Low-memory free-tier worker: FFmpeg lite stems + OpenVoice only.
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -13,18 +13,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NUMEXPR_NUM_THREADS=1 \
     MALLOC_ARENA_MAX=2 \
     VOICE_CHUNK_SECONDS=4
-
-# Debian 11 (bullseye) is EOL. deb.debian.org stopped serving its security
-# pool entirely (404s), and archive.debian.org — the permanent archive for
-# the main suite — never mirrored debian-security in the first place (its
-# own 404, confirmed directly against a real build). Drop the security
-# source outright rather than redirect it: every package this image needs
-# is available from the main bullseye/bullseye-updates suites, which
-# archive.debian.org does carry. Also skip the Release-file expiry check
-# the archive doesn't bother refreshing.
-RUN sed -i '/deb.debian.org\/debian-security/d' /etc/apt/sources.list \
-    && sed -i 's|deb.debian.org/debian |archive.debian.org/debian |g' /etc/apt/sources.list \
-    && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg git build-essential pkg-config libsndfile1 \
