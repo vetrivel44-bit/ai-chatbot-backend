@@ -32,14 +32,13 @@ module.exports = {
     agnesApiKey:         getEnv("AGNES_API_KEY",         ""),
     agnesModel:          getEnv("AGNES_MODEL",           "agnes-2.0-flash"),
     cerebrasApiKey:      getEnv("CEREBRAS_API_KEY",      ""),
-    // "llama-3.3-70b" 404'd as "model does not exist or you do not have access
-    // to it" against the live key — that error means the key itself is valid,
-    // just not entitled to that specific model. Falling back to Cerebras's
-    // smallest/most commonly available model; if this 404s too, list what the
-    // key actually has access to with:
+    // Confirmed directly against the live key via
     //   curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer $CEREBRAS_API_KEY"
-    // and set CEREBRAS_MODEL in Render to whatever that returns.
-    cerebrasModel:       getEnv("CEREBRAS_MODEL",        "llama3.1-8b"),
+    // — this key has access to exactly three models: gpt-oss-120b, gemma-4-31b,
+    // qwen-3.8-27b (no Llama models at all, despite Cerebras's docs listing
+    // some elsewhere — access varies per key/account). gpt-oss-120b is the
+    // largest/most capable of the three.
+    cerebrasModel:       getEnv("CEREBRAS_MODEL",        "gpt-oss-120b"),
     googleMapsApiKey:    getEnv("GOOGLE_MAPS_API_KEY",   ""),
     googleClientId:      getEnv("VITE_GOOGLE_CLIENT_ID", "592184427551-7hs7t358m2k3vn60amdv8vnm8b26oprt.apps.googleusercontent.com"),
     enableCloudSessions: getEnv("ENABLE_CLOUD_SESSIONS", "false") === "true",
