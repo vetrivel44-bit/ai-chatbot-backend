@@ -31,6 +31,8 @@ module.exports = {
     sambanovaApiKey:     getEnv("SAMBANOVA_API_KEY",     ""),
     agnesApiKey:         getEnv("AGNES_API_KEY",         ""),
     agnesModel:          getEnv("AGNES_MODEL",           "agnes-2.0-flash"),
+    cerebrasApiKey:      getEnv("CEREBRAS_API_KEY",      ""),
+    cerebrasModel:       getEnv("CEREBRAS_MODEL",        "llama-3.3-70b"),
     googleMapsApiKey:    getEnv("GOOGLE_MAPS_API_KEY",   ""),
     googleClientId:      getEnv("VITE_GOOGLE_CLIENT_ID", "592184427551-7hs7t358m2k3vn60amdv8vnm8b26oprt.apps.googleusercontent.com"),
     enableCloudSessions: getEnv("ENABLE_CLOUD_SESSIONS", "false") === "true",
