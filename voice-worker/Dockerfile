@@ -14,6 +14,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MALLOC_ARENA_MAX=2 \
     VOICE_CHUNK_SECONDS=4
 
+# Debian 11 (bullseye) is EOL, and deb.debian.org stopped serving its
+# security pool (every package below was 404ing before this). Point apt at
+# the permanent archive instead, and skip the Release-file expiry check the
+# archive doesn't bother refreshing.
+RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian |archive.debian.org/debian |g' /etc/apt/sources.list \
+    && echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg git build-essential pkg-config libsndfile1 \
     libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev \

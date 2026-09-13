@@ -181,6 +181,22 @@ async function chat(req, res) {
     const attachmentContext = getAttachmentContext(file);
     if (attachmentContext) messages.push({ role: "user", content: attachmentContext });
   }
+
+  // Computer mode's screen-control agent sends a fresh screenshot every step and
+  // needs the model to actually see it, unlike every other mode's image
+  // attachments, which go through the Vision AI branch below instead. Only
+  // gemini's adapter currently understands the resulting `images` field.
+  const isComputerUseImage = mode === "computer_use" && imageFiles.length > 0;
+  if (isComputerUseImage) {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (lastUser) {
+      lastUser.images = imageFiles.slice(0, 1).map((file) => ({
+        mimeType: file.mimetype,
+        data: file.buffer.toString("base64"),
+      }));
+    }
+  }
+
   if (!messages.length) throw new ApiError(400, "No valid messages provided");
 
   const billingUserId = resolveBillingUserId(req);
@@ -201,7 +217,7 @@ async function chat(req, res) {
   const heartbeat = setInterval(() => { res.write(": ping\n\n"); }, 12000);
   const cleanup = () => clearInterval(heartbeat);
 
-  if (imageFiles.length > 0) {
+  if (imageFiles.length > 0 && !isComputerUseImage) {
     try {
       res.write(`data: ${JSON.stringify({ type: "status", data: `Analyzing ${imageFiles.length} image(s) with Vision AI...` })}\n\n`);
       const visionResult = await analyzeImagesWithVision(imageFiles, input);

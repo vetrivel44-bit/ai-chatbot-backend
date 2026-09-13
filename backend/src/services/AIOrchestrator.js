@@ -298,6 +298,30 @@ The assistant should feel like:
       sys += "\n\n[MODE: CREATIVE] You are a creative writer. Be vivid, imaginative, and original.";
     } else if (mode === "research") {
       sys += "\n\n[MODE: RESEARCH] Provide well-cited, comprehensive answers.";
+    } else if (mode === "computer_use") {
+      sys = `You are VetroAI's screen-control agent. A human has explicitly granted you permission, for this session only, to move their mouse, click, and type on their real desktop through a companion app. You act one small, reversible step at a time and a human is watching the screen the whole time; they can revoke control instantly.
+
+You are given the user's goal, a plain-text log of the actions already taken this run, and a screenshot of the current screen. Decide the single next action that moves toward the goal.
+
+OUTPUT FORMAT (strict)
+Respond with ONLY one raw JSON object — no markdown fences, no prose before or after it:
+{"action": "click", "x": 512, "y": 300, "button": "left", "reasoning": "one short sentence"}
+
+Allowed "action" values and their fields:
+- "move": {x, y}
+- "click": {x, y, button: "left"|"right"|"middle" (default left), double: true|false (optional)} — always move to (x, y) then click; estimate coordinates from what is visible in the screenshot.
+- "type": {text} — types at the current cursor/focus position, so click into the right field first if needed. Max 2000 characters.
+- "key": {key: one of ENTER, TAB, ESCAPE, BACKSPACE, DELETE, SPACE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGEUP, PAGEDOWN, or a single letter A/C/V/X/Z, modifiers: array of CTRL/SHIFT/ALT (optional)}
+- "scroll": {amount} — positive scrolls down, negative scrolls up, roughly in pixels.
+- "done": {summary} — the goal is reached, or you cannot safely continue; explain why in "summary" and stop.
+
+RULES
+1. One action per reply. Never invent extra keys or actions outside this list.
+2. You may freely open apps, browse, search, fill in fields, download files, and click through a normal software installer's own screens (Next, Continue, I Agree, Finish, choosing an install location) — none of that needs a pause.
+3. There is exactly one category of step you must NEVER take yourself: the final action that actually executes/runs code with real effect on this machine or account — running a downloaded installer's last "Install"/"Run"/"Open" button, approving an OS admin/UAC/security elevation prompt, entering payment or account-credential details, sending a message/email, or submitting a form with real-world consequences. The moment you are about to take that specific step, STOP and reply "done", stating plainly what the human needs to click themselves and why. Getting everything ready right up to that click is fine and expected; taking the click itself is not.
+4. If the screenshot doesn't match what you expect (wrong app in focus, an unexpected dialog, a login screen, something that looks like it might not be the software the user actually asked for), reply "done" and explain what you see rather than guessing blindly.
+5. Coordinates are pixels within the screenshot you were given — read them from what's actually visible, don't assume a fixed layout.
+6. If you've made no visible progress for several steps in a row, reply "done" rather than repeating the same action.`;
     } else if (mode === "design") {
       sys += `\n\n[MODE: DESIGN] You are a senior product/UI designer producing portfolio-quality, production-grade interfaces — the bar is "this looks like it shipped from a top-tier design studio," never a wireframe, and never raw unstyled HTML.
 
@@ -329,8 +353,9 @@ Before finishing, mentally check: every class referenced in the HTML has a match
     }
 
     // ─── VISUALIZATION INTENT LAYER ─── (irrelevant noise for design mode — it conflicts with
-    // the "ONE html code block only" rule and dilutes the model's attention away from styling)
-    if (mode !== "design") {
+    // the "ONE html code block only" rule and dilutes the model's attention away from styling;
+    // for computer_use it would corrupt the strict single-JSON-action contract entirely)
+    if (mode !== "design" && mode !== "computer_use") {
     sys += `\n\n### RICH VISUALIZATION INTENT SYSTEM
 You are equipped with a dynamic visualization rendering system. When responding to comparisons, trends, analytics, rankings, geographical queries, statistics, timelines, process milestones, system architectures, or technical details, you MUST output the appropriate structured JSON block inside your response. Never return only plain text or standard markdown tables when these premium visual components would improve user understanding. You may mix markdown text before and after the blocks.
 
@@ -470,12 +495,35 @@ Choose the single best-fitting visualization block(s) from the formats below:
   }
 
   async processRequest(reqId, params, res) {
-    const { messages, mode, provider: preferredProvider, options, memories } = params;
+    const { messages, mode, provider: preferredProvider, memories } = params;
+    let { options } = params;
     const userQuery = messages[messages.length - 1]?.content || "";
-    
-    let currentProviderName = providerManager.getBestProvider(mode, preferredProvider);
+
+    // The screen-control agent sends a screenshot every step. Gemini is the only
+    // adapter here that reads the `images` field (see geminiAdapter.js), so this
+    // mode can't fall back to a text-only provider — that would have the model
+    // guessing blindly at what's on screen instead of refusing to act.
+    const isComputerUse = mode === "computer_use";
+    if (isComputerUse) {
+      if (!config.geminiApiKey) {
+        logger.error("AIOrchestrator.computerUseProviderNotConfigured", { reqId });
+        this.sendVetroEvent(
+          res,
+          "error",
+          "Screen control needs a Gemini API key configured on the backend (it's the only provider here that can read the screenshot each step)."
+        );
+        return;
+      }
+      // Every step is a full network round trip, and the reply is just one
+      // small JSON object — capping generation length is one of the biggest
+      // levers on how sluggish the loop feels, so ignore whatever maxTokens
+      // the caller sent for this mode and use a small fixed budget.
+      options = { ...options, maxTokens: 220 };
+    }
+
+    let currentProviderName = isComputerUse ? "gemini" : providerManager.getBestProvider(mode, preferredProvider);
     let attempts = 0;
-    const maxAttempts = 3;
+    const maxAttempts = isComputerUse ? 1 : 3;
     let success = false;
 
     this.sendVetroEvent(res, "status", "Analyzing your request...");
@@ -520,7 +568,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
 
     // Kick off image lookup in parallel with everything else — only for modes where
     // an inline gallery makes sense (skip design/code/data-analysis style modes).
-    const galleryEligibleMode = !["design", "code_exec", "data_analysis"].includes(mode);
+    const galleryEligibleMode = !["design", "code_exec", "data_analysis", "computer_use"].includes(mode);
     const shouldFetchImages = galleryEligibleMode && !isGreeting && !isIdentityQuestion && this.needsImageSearch(userQuery);
     const imagesPromise = shouldFetchImages
       ? searchImages(userQuery, 4).catch(() => [])
@@ -661,10 +709,35 @@ Choose the single best-fitting visualization block(s) from the formats below:
       return chunkContent;
     };
 
-    try {
+    // A provider can accept the connection and start a stream that then stalls
+    // mid-response (no error, no more chunks — just silence). Without a watchdog
+    // here, the only timeout in the whole flow guards *acquiring* the stream
+    // (see processRequest's Promise.race around adapter.generateStream), so a
+    // stall like this hangs forever: the SSE heartbeat keeps the client's
+    // connection open, but no content ever arrives and provider fallback never
+    // kicks in. Track activity and time out if a provider goes quiet for too
+    // long, so the caller's retry/fallback logic (in processRequest) can take over.
+    let lastActivityAt = Date.now();
+    const touch = () => { lastActivityAt = Date.now(); };
+
+    let reader = null;
+    const IDLE_TIMEOUT_MS = 45000;
+    let watchdogInterval = null;
+    const watchdog = new Promise((_, reject) => {
+      watchdogInterval = setInterval(() => {
+        if (Date.now() - lastActivityAt > IDLE_TIMEOUT_MS) {
+          reader?.cancel?.();
+          stream.destroy?.(new Error("stream idle timeout"));
+          reject(new Error(`Provider stream stalled — no data received for ${IDLE_TIMEOUT_MS / 1000}s`));
+        }
+      }, 5000);
+    });
+
+    const consume = async () => {
       // 1. Handle Async Iterables (SDKs or Web ReadableStreams)
       if (Symbol.asyncIterator in stream) {
         for await (const chunk of stream) {
+          touch();
           // If it is an SDK object payload (e.g. from Groq SDK), process directly
           if (typeof chunk === "object" && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
             const content = this.normalizeChunk(chunk, provider);
@@ -689,6 +762,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
       else if (stream.on) {
         await new Promise((resolve, reject) => {
           stream.on("data", (chunk) => {
+            touch();
             if (typeof chunk === "object" && !Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
               const content = this.normalizeChunk(chunk, provider);
               if (content) {
@@ -712,12 +786,13 @@ Choose the single best-fitting visualization block(s) from the formats below:
       }
       // 3. Handle Web Streams with getReader (Agnes uses this)
       else if (stream.getReader && typeof stream.getReader === "function") {
-        const reader = stream.getReader();
+        reader = stream.getReader();
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
+            touch();
+
             const text = decoder.decode(value, { stream: true });
             const content = processTextChunk(text);
             if (content) {
@@ -748,9 +823,15 @@ Choose the single best-fitting visualization block(s) from the formats below:
           this.sendVetroEvent(res, "content", content);
         }
       }
+    };
+
+    try {
+      await Promise.race([consume(), watchdog]);
     } catch (err) {
       logger.error(`AIOrchestrator.pipeStream.error [${provider}]`, { error: err.message });
       throw err;
+    } finally {
+      clearInterval(watchdogInterval);
     }
 
     // Check for truncation (simplistic check)
