@@ -84,7 +84,12 @@ class ProviderManager {
     };
 
     if (!process.env.LAMBDA_TASK_ROOT) {
-      setInterval(() => this.checkHealth(), 15000);
+      // Unreferenced on purpose: the HTTP listener is what should keep the
+      // process alive. A referenced poll here holds open anything that merely
+      // requires this module — a test run never exits, and a short-lived
+      // script hangs for 15 seconds at a time.
+      this.healthCheckTimer = setInterval(() => this.checkHealth(), 15000);
+      this.healthCheckTimer.unref?.();
     }
   }
 
