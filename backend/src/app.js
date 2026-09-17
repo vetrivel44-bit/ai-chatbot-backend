@@ -37,6 +37,7 @@ app.use("/api/code",require("./routes/codeRoutes"));
 app.use("/api/cricket",require("./routes/cricketRoutes"));
 app.use("/api/voice-cover",voiceCoverRoutes);
 app.use("/api/web-search",require("./routes/webSearchRoutes"));
+app.use("/api",require("./routes/externalDataRoutes"));
 app.use("/api",chatRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);

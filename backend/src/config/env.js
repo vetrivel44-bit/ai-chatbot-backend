@@ -47,6 +47,14 @@ module.exports = {
     twilioFromNumber:    getEnv("TWILIO_FROM_NUMBER",    ""),
     bookingNotificationPhones: getEnv("BOOKING_NOTIFICATION_PHONES", "8778508652,9994777865"),
     tavilyApiKey:        getEnv("TAVILY_API_KEY",        ""),
+    // News feed. NEWS_API_KEY is provider-neutral; NEWSDATA_API_KEY is the
+    // older name for the same setting. The service is detected from the key's
+    // shape, and NEWS_PROVIDER (currents | newsdata | thenewsapi | newsapi)
+    // overrides that when detection is wrong. NEWS_API_LIMIT is plan-capped by
+    // some services, so it is only sent when set.
+    newsDataApiKey:      getEnv("NEWS_API_KEY", "") || getEnv("NEWSDATA_API_KEY", ""),
+    newsProvider:        getEnv("NEWS_PROVIDER",        ""),
+    newsLimit:           getEnv("NEWS_API_LIMIT",       ""),
     stripeSecretKey:        getEnv("STRIPE_SECRET_KEY",        ""),
     stripePublishableKey:   getEnv("STRIPE_PUBLISHABLE_KEY",   ""),
     stripeWebhookSecret:    getEnv("STRIPE_WEBHOOK_SECRET",    ""),
