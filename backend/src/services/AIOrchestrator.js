@@ -523,13 +523,28 @@ Choose the single best-fitting visualization block(s) from the formats below:
 
     let currentProviderName = isComputerUse ? "gemini" : providerManager.getBestProvider(mode, preferredProvider);
     let attempts = 0;
-    const maxAttempts = isComputerUse ? 1 : 3;
+    // Bounded by how many providers are actually configured, so a real outage
+    // can't hold the user forever, but a request also never gives up while a
+    // configured, working provider hasn't been tried yet.
+    const maxAttempts = isComputerUse
+      ? 1
+      : Math.max(1, providerManager.getAvailableProviders({ includeSuspended: true }).length);
     // Remembers which providers were walked and why the last one gave up, so
     // the message the user sees names the real cause instead of always
     // blaming capacity.
     const attemptedProviders = new Set();
     let lastFailure = null;
     let success = false;
+
+    if (!currentProviderName) {
+      logger.error("AIOrchestrator.noConfiguredProvider", { reqId });
+      this.sendVetroEvent(
+        res,
+        "error",
+        "VetroAI is not configured with an AI provider yet. Add at least one provider API key on the backend."
+      );
+      return;
+    }
 
     this.sendVetroEvent(res, "status", "Analyzing your request...");
 
@@ -619,8 +634,8 @@ Choose the single best-fitting visualization block(s) from the formats below:
       
       if (!adapter) {
         logger.error(`AIOrchestrator: No adapter for ${currentProviderName}`);
-        const nextProvider = providerManager.getFallbackProvider(currentProviderName);
-        if (nextProvider === currentProviderName) break; // Avoid loop
+        const nextProvider = providerManager.getFallbackProvider(currentProviderName, [...attemptedProviders]);
+        if (!nextProvider || nextProvider === currentProviderName) break; // Avoid loop
         currentProviderName = nextProvider;
         continue;
       }
@@ -673,24 +688,29 @@ Choose the single best-fitting visualization block(s) from the formats below:
           logger.warn(`Connection timeout for ${currentProviderName}`, { reqId });
         }
         
-        if (attempts < maxAttempts) {
-          const nextProvider = providerManager.getFallbackProvider(currentProviderName);
+        const nextProvider = attempts < maxAttempts
+          ? providerManager.getFallbackProvider(currentProviderName, [...attemptedProviders])
+          : null;
+
+        if (nextProvider) {
           let friendlyMsg = `Issue with ${currentProviderName}. Switching to another model…`;
           if (isRateLimit) {
             friendlyMsg = `Model ${currentProviderName} is temporarily busy. Switching to another AI model…`;
           } else if (isTimeout) {
             friendlyMsg = `Connection with ${currentProviderName} timed out. Trying another model…`;
           }
-          
+
           this.sendVetroEvent(res, "clear", "");
           this.sendVetroEvent(res, "status", friendlyMsg);
           currentProviderName = nextProvider;
-          
-          // Exponential backoff
-          const backoffTime = Math.pow(2, attempts) * 1000;
+
+          // Exponential backoff, capped so a long fallback chain doesn't stall
+          // the response for minutes.
+          const backoffTime = Math.min(Math.pow(2, attempts) * 1000, 6000);
           await new Promise(resolve => setTimeout(resolve, backoffTime));
         } else {
           this.sendVetroEvent(res, "error", this.describeFinalFailure(lastFailure, attemptedProviders));
+          break;
         }
       }
     }
