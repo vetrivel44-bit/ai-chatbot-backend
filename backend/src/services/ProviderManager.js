@@ -1,4 +1,5 @@
 const logger = require("../utils/logger");
+const { config } = require("../config/env");
 const geminiAdapter = require("../providers/geminiAdapter");
 const mistralAdapter = require("../providers/mistralAdapter");
 const sambanovaAdapter = require("../providers/sambanovaAdapter");
@@ -93,6 +94,25 @@ class ProviderManager {
     }
   }
 
+  isConfigured(providerName) {
+    const configured = {
+      chatgpt: Boolean(config.chatgptApiKey),
+      mistral: Boolean(config.mistralApiKey),
+      agnes: Boolean(config.agnesApiKey),
+      sambanova: Boolean(config.sambanovaApiKey),
+      gemini: Boolean(config.geminiApiKey),
+      cerebras: Boolean(config.cerebrasApiKey),
+    };
+    return configured[providerName] === true;
+  }
+
+  getAvailableProviders({ includeSuspended = false } = {}) {
+    return Object.keys(this.providers).filter((name) => {
+      if (!this.isConfigured(name)) return false;
+      return includeSuspended || !this.providers[name].isSuspended;
+    });
+  }
+
   async checkHealth() {
     for (const [name, p] of Object.entries(this.providers)) {
       if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
@@ -112,9 +132,9 @@ class ProviderManager {
   }
 
   getBestProvider(mode, preferredProvider) {
-    if (preferredProvider && preferredProvider !== "undefined") {
+    if (preferredProvider && preferredProvider !== "undefined" && preferredProvider !== "auto") {
       const pref = preferredProvider.toLowerCase();
-      if (this.providers[pref]) {
+      if (this.providers[pref] && this.isConfigured(pref)) {
         const p = this.providers[pref];
         if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
           p.isSuspended = false;
@@ -131,10 +151,15 @@ class ProviderManager {
       }
     }
 
-    const candidates = Object.keys(this.providers).filter(name => !this.providers[name].isSuspended);
+    let candidates = this.getAvailableProviders();
     if (candidates.length === 0) {
-      this.resetAllProviders();
-      candidates.push(...Object.keys(this.providers));
+      const configured = this.getAvailableProviders({ includeSuspended: true });
+      if (configured.length === 0) return null;
+      for (const name of configured) {
+        this.providers[name].isSuspended = false;
+        this.providers[name].consecutiveErrors = 0;
+      }
+      candidates = configured;
     }
 
     return candidates.sort((a, b) => {
@@ -158,9 +183,10 @@ class ProviderManager {
     })[0];
   }
 
-  getFallbackProvider(failedProvider) {
+  getFallbackProvider(failedProvider, excludedProviders = []) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "agnes", "chatgpt"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "agnes", "chatgpt", "cerebras"];
+    const excluded = new Set([failedProvider, ...excludedProviders]);
 
     for (const [, prov] of Object.entries(this.providers)) {
       if (prov.isSuspended && Date.now() - prov.lastFailure > prov.cooldown) {
@@ -170,11 +196,15 @@ class ProviderManager {
     }
 
     for (const f of fallbackList) {
-      if (this.providers[f] && !this.providers[f].isSuspended) return f;
+      if (this.providers[f] && this.isConfigured(f) && !this.providers[f].isSuspended && !excluded.has(f)) {
+        return f;
+      }
     }
 
-    this.resetAllProviders();
-    return Object.keys(this.providers).sort(
+    // Try any remaining configured provider before giving up.
+    const remaining = this.getAvailableProviders().filter((name) => !excluded.has(name));
+    if (remaining.length === 0) return null;
+    return remaining.sort(
       (a, b) => this.providers[b].weight - this.providers[a].weight
     )[0];
   }
@@ -214,7 +244,10 @@ class ProviderManager {
     const stats = {};
     for (const [name, p] of Object.entries(this.providers)) {
       stats[name] = {
-        status: p.isSuspended ? "suspended" : (p.consecutiveErrors > 0 ? "degraded" : "healthy"),
+        configured: this.isConfigured(name),
+        status: !this.isConfigured(name)
+          ? "unconfigured"
+          : (p.isSuspended ? "suspended" : (p.consecutiveErrors > 0 ? "degraded" : "healthy")),
         latency: Math.round(p.latency),
         successRate: Math.round(p.successRate * 100) / 100,
       };
