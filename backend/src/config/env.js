@@ -28,6 +28,7 @@ module.exports = {
     mistralMaxTokens:    Number(getEnv("MISTRAL_MAX_TOKENS",  "8192")),
     chatgptApiKey:       getEnv("CHATGPT_API_KEY",       ""),
     geminiApiKey:        getEnv("GEMINI_API_KEY",        ""),
+    geminiModel:         getEnv("GEMINI_MODEL",          "gemini-3.6-flash"),
     sambanovaApiKey:     getEnv("SAMBANOVA_API_KEY",     ""),
     agnesApiKey:         getEnv("AGNES_API_KEY",         ""),
     agnesModel:          getEnv("AGNES_MODEL",           "agnes-2.0-flash"),
