@@ -4,49 +4,51 @@ const router = express.Router();
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const allowed = new Set(["audio/mpeg","audio/wav","audio/x-wav","audio/mp4","audio/x-m4a","audio/aac","audio/ogg","audio/flac","audio/webm","audio/pcm","application/octet-stream"]);
-const upload = multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:2},fileFilter:(_req,file,cb)=>allowed.has(file.mimetype)?cb(null,true):cb(new Error("Unsupported audio format"))});
-const fail=(res,status,message,code)=>res.status(status).json({success:false,message,code});
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_BYTES, files: 10 },
+  fileFilter: (_req, file, cb) => allowed.has(file.mimetype) ? cb(null, true) : cb(new Error("Unsupported audio format")),
+});
 
-router.post("/process", upload.fields([{name:"song",maxCount:1},{name:"referenceVoice",maxCount:1}]), async (req,res) => {
-  try {
-    const song = req.files?.song?.[0];
-    const voice = req.files?.referenceVoice?.[0];
-    if (!song) return fail(res,400,"Song audio is required.","SONG_REQUIRED");
-    if (!voice) return fail(res,400,"Record or upload your own reference voice first.","REFERENCE_VOICE_REQUIRED");
-    if (req.body.consent !== "true") return fail(res,400,"Voice authorization consent is required.","VOICE_CONSENT_REQUIRED");
+const jsonError = (res, status, message, code) => res.status(status).json({ success:false, message, code });
 
-    const workerUrl = process.env.VOICE_COVER_WORKER_URL;
-    if (!workerUrl) return fail(res,503,"Self-voice engine is not deployed yet. Set VOICE_COVER_WORKER_URL in Render.","VOICE_WORKER_NOT_CONFIGURED");
-
-    const form = new FormData();
-    form.append("song", new Blob([song.buffer], {type:song.mimetype}), song.originalname || "song.mp3");
-    form.append("reference_voice", new Blob([voice.buffer], {type:voice.mimetype}), voice.originalname || "my-voice.webm");
-    form.append("output_format", ["wav","mp3"].includes(req.body.outputFormat) ? req.body.outputFormat : "mp3");
-
-    const response = await fetch(`${workerUrl.replace(/\/$/,"")}/process`, {method:"POST",body:form});
-    if (!response.ok) {
-      const raw = await response.text();
-      let message = raw || "Self-voice processing failed.";
-      try {
-        const parsed = JSON.parse(raw);
-        message = parsed?.detail || parsed?.message || message;
-      } catch {}
-      console.error("voice worker failed", response.status, message);
-      return fail(res,response.status,message,"VOICE_WORKER_FAILED");
-    }
-
-    const type = response.headers.get("content-type") || "audio/mpeg";
-    res.status(200).set("Content-Type", type);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    return res.send(buffer);
-  } catch (error) {
-    console.error("voice-cover process failed", error);
-    return fail(res,500,error?.message || "Voice cover processing failed.","VOICE_COVER_PROCESS_ERROR");
+// Custom voice creation stays backend-only. The configured provider must support
+// authorized user-created voices. Never expose provider credentials to the browser.
+router.post("/voices", upload.array("samples", 10), async (req, res) => {
+  if (req.body.consent !== "true") return jsonError(res, 400, "Voice authorization consent is required.", "VOICE_CONSENT_REQUIRED");
+  if (!req.files?.length) return jsonError(res, 400, "At least one voice sample is required.", "VOICE_SAMPLE_REQUIRED");
+  if (!process.env.VOICE_PROFILE_PROVIDER_URL || !process.env.VOICE_PROFILE_PROVIDER_KEY) {
+    return jsonError(res, 501, "Custom voice profile provider is not configured. Add a provider that supports authorized user-created voices and returns a compatible voice ID.", "VOICE_PROVIDER_NOT_CONFIGURED");
   }
+  return jsonError(res, 501, "Connect VOICE_PROFILE_PROVIDER_URL using its documented multipart API. Provider-specific parameters are deliberately not invented.", "VOICE_PROVIDER_ADAPTER_REQUIRED");
 });
 
-router.use((err,_req,res,_next)=>{
-  if(err?.code==="LIMIT_FILE_SIZE") return fail(res,413,"Audio file exceeds the 50 MB limit.","FILE_TOO_LARGE");
-  return fail(res,400,err?.message||"Audio upload failed.","AUDIO_UPLOAD_ERROR");
+// Stem separation always happens before voice conversion. The input must be audio
+// the user owns or is licensed/permitted to process; this route does not download
+// or rip recordings from streaming services based on a song title.
+router.post("/separate", upload.single("song"), async (req, res) => {
+  if (!req.file) return jsonError(res, 400, "Song file is required.", "SONG_REQUIRED");
+  if (!process.env.AUDIO_SEPARATOR_URL) {
+    return jsonError(res, 501, "Audio stem separator is not configured. Configure AUDIO_SEPARATOR_URL for a Demucs/UVR-compatible service.", "SEPARATOR_NOT_CONFIGURED");
+  }
+  return jsonError(res, 501, "Connect AUDIO_SEPARATOR_URL using the separator service's documented request/response contract and return { vocalsUrl, instrumentalUrl }.", "SEPARATOR_ADAPTER_REQUIRED");
 });
-module.exports=router;
+
+// Puter may return a browser-local blob URL. A backend cannot fetch blob: URLs, so
+// the frontend uploads the converted vocal bytes here as multipart instead.
+router.post("/mix", upload.single("convertedVocals"), async (req, res) => {
+  const { instrumentalUrl, outputFormat = "mp3" } = req.body || {};
+  if (!instrumentalUrl || !req.file) return jsonError(res, 400, "Both the instrumental reference and converted vocal audio are required.", "TRACKS_REQUIRED");
+  if (!["mp3","wav"].includes(outputFormat)) return jsonError(res, 400, "Output format must be mp3 or wav.", "BAD_OUTPUT_FORMAT");
+  if (!process.env.AUDIO_MIXER_URL) {
+    return jsonError(res, 501, "Audio mixer is not configured. Configure AUDIO_MIXER_URL for an FFmpeg/media worker.", "MIXER_NOT_CONFIGURED");
+  }
+  return jsonError(res, 501, "Connect AUDIO_MIXER_URL using its documented multipart API, sending the converted vocal bytes plus the instrumental reference, and return { url }.", "MIXER_ADAPTER_REQUIRED");
+});
+
+router.use((err, _req, res, _next) => {
+  if (err?.code === "LIMIT_FILE_SIZE") return jsonError(res, 413, "Audio file exceeds the 50 MB limit.", "FILE_TOO_LARGE");
+  return jsonError(res, 400, err?.message || "Audio upload failed.", "AUDIO_UPLOAD_ERROR");
+});
+
+module.exports = router;

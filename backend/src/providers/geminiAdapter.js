@@ -8,9 +8,7 @@ async function generateStream(messages, options = {}) {
   }
 
   const { temperature, maxTokens, model } = options;
-  // gemini-1.5-flash is deprecated and returns 404 from the Gemini API.
-  // gemini-3.6-flash is the current default; GEMINI_MODEL overrides it.
-  const modelName = model || config.geminiModel || "gemini-3.6-flash";
+  const modelName = model || config.geminiModel;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?key=${config.geminiApiKey}`;
 
   const systemMessage = messages.find(m => m.role === "system");
@@ -52,6 +50,7 @@ async function generateStream(messages, options = {}) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!res.ok) {

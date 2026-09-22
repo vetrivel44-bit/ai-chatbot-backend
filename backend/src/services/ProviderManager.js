@@ -1,11 +1,14 @@
 const logger = require("../utils/logger");
 const { config } = require("../config/env");
+const groqAdapter = require("../providers/groqAdapter");
 const geminiAdapter = require("../providers/geminiAdapter");
 const mistralAdapter = require("../providers/mistralAdapter");
 const sambanovaAdapter = require("../providers/sambanovaAdapter");
 const agnesAdapter = require("../providers/agnesAdapter");
 const chatgptAdapter = require("../providers/chatgptAdapter");
-const cerebrasAdapter = require("../providers/cerebrasAdapter");
+const fableAdapter = require("../providers/fableAdapter");
+const plugskyAdapter = require("../providers/plugskyAdapter");
+const cohereAdapter = require("../providers/cohereAdapter");
 
 class ProviderManager {
   constructor() {
@@ -20,7 +23,43 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "agnes", "sambanova", "gemini"],
+        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+      },
+      fable: {
+        adapter: fableAdapter,
+        weight: 95,
+        score: 95,
+        latency: 0,
+        successRate: 1,
+        consecutiveErrors: 0,
+        isSuspended: false,
+        lastFailure: 0,
+        cooldown: 20000,
+        fallbacks: ["plugsky", "chatgpt", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+      },
+      plugsky: {
+        adapter: plugskyAdapter,
+        weight: 105,
+        score: 105,
+        latency: 0,
+        successRate: 1,
+        consecutiveErrors: 0,
+        isSuspended: false,
+        lastFailure: 0,
+        cooldown: 20000,
+        fallbacks: ["fable", "chatgpt", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+      },
+      groq: {
+        adapter: groqAdapter,
+        weight: 80,
+        score: 80,
+        latency: 0,
+        successRate: 1,
+        consecutiveErrors: 0,
+        isSuspended: false,
+        lastFailure: 0,
+        cooldown: 20000,
+        fallbacks: ["plugsky", "chatgpt", "agnes", "mistral", "sambanova", "gemini", "cohere"],
       },
       mistral: {
         adapter: mistralAdapter,
@@ -32,7 +71,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["chatgpt", "sambanova", "agnes", "gemini"],
+        fallbacks: ["plugsky", "groq", "sambanova", "agnes", "gemini", "cohere"],
       },
       agnes: {
         adapter: agnesAdapter,
@@ -44,7 +83,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "chatgpt", "sambanova", "gemini"],
+        fallbacks: ["plugsky", "mistral", "groq", "sambanova", "gemini", "cohere"],
       },
       sambanova: {
         adapter: sambanovaAdapter,
@@ -56,11 +95,11 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "agnes", "chatgpt", "gemini"],
+        fallbacks: ["plugsky", "groq", "mistral", "agnes", "gemini", "cohere"],
       },
       gemini: {
         adapter: geminiAdapter,
-        weight: 50,
+        weight: 50, // Lowered — free quota often exhausted
         score: 50,
         latency: 0,
         successRate: 1,
@@ -68,40 +107,43 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "agnes", "sambanova", "chatgpt"],
+        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "cohere"],
       },
-      cerebras: {
-        adapter: cerebrasAdapter,
-        weight: 100,
-        score: 100,
+      cohere: {
+        adapter: cohereAdapter,
+        // Deliberately the lowest weight so it's never auto-picked as the
+        // primary provider — it only steps in once every other configured
+        // provider above has failed or run out of credits.
+        weight: 10,
+        score: 10,
         latency: 0,
         successRate: 1,
         consecutiveErrors: 0,
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["mistral", "agnes", "sambanova", "chatgpt"],
+        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "gemini"],
       },
     };
 
+    // Background health check loop - only in non-serverless
     if (!process.env.LAMBDA_TASK_ROOT) {
-      // Unreferenced on purpose: the HTTP listener is what should keep the
-      // process alive. A referenced poll here holds open anything that merely
-      // requires this module — a test run never exits, and a short-lived
-      // script hangs for 15 seconds at a time.
-      this.healthCheckTimer = setInterval(() => this.checkHealth(), 15000);
+      this.healthCheckTimer = setInterval(() => this.checkHealth(), 15000); // every 15 s
       this.healthCheckTimer.unref?.();
     }
   }
 
   isConfigured(providerName) {
     const configured = {
+      plugsky: Boolean(config.plugskyApiKey),
       chatgpt: Boolean(config.chatgptApiKey),
+      fable: Boolean(config.fableRapidApiKey),
+      groq: Boolean(config.groqApiKey),
       mistral: Boolean(config.mistralApiKey),
       agnes: Boolean(config.agnesApiKey),
       sambanova: Boolean(config.sambanovaApiKey),
       gemini: Boolean(config.geminiApiKey),
-      cerebras: Boolean(config.cerebrasApiKey),
+      cohere: Boolean(config.cohereApiKey),
     };
     return configured[providerName] === true;
   }
@@ -132,9 +174,11 @@ class ProviderManager {
   }
 
   getBestProvider(mode, preferredProvider) {
-    if (preferredProvider && preferredProvider !== "undefined" && preferredProvider !== "auto") {
+    // If user explicitly chose a provider, try it first if not suspended
+    if (preferredProvider && !["undefined", "auto"].includes(preferredProvider.toLowerCase())) {
       const pref = preferredProvider.toLowerCase();
       if (this.providers[pref] && this.isConfigured(pref)) {
+        // Unsuspend if cooldown has passed
         const p = this.providers[pref];
         if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
           p.isSuspended = false;
@@ -144,6 +188,7 @@ class ProviderManager {
       }
     }
 
+    // Auto-expire cooled-down suspensions before picking
     for (const [, p] of Object.entries(this.providers)) {
       if (p.isSuspended && Date.now() - p.lastFailure > p.cooldown) {
         p.isSuspended = false;
@@ -151,7 +196,9 @@ class ProviderManager {
       }
     }
 
-    let candidates = this.getAvailableProviders();
+    const candidates = this.getAvailableProviders();
+
+    // If all configured providers are suspended, reset only those providers.
     if (candidates.length === 0) {
       const configured = this.getAvailableProviders({ includeSuspended: true });
       if (configured.length === 0) return null;
@@ -159,18 +206,20 @@ class ProviderManager {
         this.providers[name].isSuspended = false;
         this.providers[name].consecutiveErrors = 0;
       }
-      candidates = configured;
+      candidates.push(...configured);
     }
 
+    // Sort by weighted score
     return candidates.sort((a, b) => {
       const pA = this.providers[a];
       const pB = this.providers[b];
+
       let scoreA = pA.weight;
       let scoreB = pB.weight;
 
       if (mode === "debugger" || mode === "coding") {
-        if (a === "chatgpt") scoreA += 50;
-        if (b === "chatgpt") scoreB += 50;
+        if (a === "groq") scoreA += 50;
+        if (b === "groq") scoreB += 50;
       } else if (mode === "deep_search" || mode === "analyst") {
         if (a === "gemini") scoreA += 50;
         if (b === "gemini") scoreB += 50;
@@ -185,9 +234,10 @@ class ProviderManager {
 
   getFallbackProvider(failedProvider, excludedProviders = []) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["gemini", "sambanova", "mistral", "agnes", "chatgpt", "cerebras"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["plugsky", "gemini", "sambanova", "mistral", "groq", "agnes", "cohere"];
     const excluded = new Set([failedProvider, ...excludedProviders]);
 
+    // Auto-expire cooled-down suspensions first
     for (const [, prov] of Object.entries(this.providers)) {
       if (prov.isSuspended && Date.now() - prov.lastFailure > prov.cooldown) {
         prov.isSuspended = false;
@@ -220,6 +270,7 @@ class ProviderManager {
     } else {
       p.consecutiveErrors++;
       p.successRate = (p.successRate * 0.9);
+      // Only suspend after 5 consecutive failures so transient errors don't kill the provider
       if (p.consecutiveErrors >= 5) {
         logger.warn(`ProviderManager: Suspending ${providerName} after ${p.consecutiveErrors} consecutive errors`);
         p.isSuspended = true;

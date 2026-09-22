@@ -2,11 +2,12 @@ function getEnv(name, fallback) {
   const value = process.env[name];
   if (value === undefined || value === "") {
     if (fallback !== undefined) return fallback;
-    return "";
+    return ""; // return empty instead of crashing
   }
   return value;
 }
 
+// No-op validateEnv — validation is now handled gracefully in server.js
 function validateEnv() {}
 
 module.exports = {
@@ -22,40 +23,89 @@ module.exports = {
     jwtRefreshExpiresIn: getEnv("JWT_REFRESH_EXPIRES_IN","7d"),
     bcryptSaltRounds:    Number(getEnv("BCRYPT_SALT_ROUNDS", "12")),
     corsOrigin:          getEnv("CORS_ORIGIN",           "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"),
+    groqApiKey:          getEnv("GROQ_API_KEY",          ""),
+    groqModel:           getEnv("GROQ_MODEL",            "llama-3.3-70b-versatile"),
+    groqTemperature:     Number(getEnv("GROQ_TEMPERATURE", "0.7")),
+    groqMaxTokens:       Number(getEnv("GROQ_MAX_TOKENS",  "16384")),
+    // Related-question generation. Deliberately a stronger model than the chat
+    // default's fast tier — templated suggestions were mostly the small model
+    // reaching for a familiar shape instead of reading the answer.
+    groqFollowUpModel:   getEnv("GROQ_FOLLOWUP_MODEL",  "llama-3.3-70b-versatile"),
     mistralApiKey:       getEnv("MISTRAL_API_KEY",       ""),
-    mistralModel:        getEnv("MISTRAL_MODEL",         "mistral-small-latest"),
+    mistralModel:        getEnv("MISTRAL_MODEL",        "mistral-small-latest"),
     mistralTemperature:  Number(getEnv("MISTRAL_TEMPERATURE", "0.7")),
     mistralMaxTokens:    Number(getEnv("MISTRAL_MAX_TOKENS",  "8192")),
     chatgptApiKey:       getEnv("CHATGPT_API_KEY",       ""),
+    fableRapidApiKey:    getEnv("FABLE_RAPIDAPI_KEY",    getEnv("CHATGPT_API_KEY", "")),
+    fableApiHost:        getEnv("FABLE_API_HOST",        "claude-fable-5-api.p.rapidapi.com"),
+    fableApiUrl:         getEnv("FABLE_API_URL",         "https://claude-fable-5-api.p.rapidapi.com/n9zkopuh8fn4eqyi5xy5bqr3tt66mkt3"),
     geminiApiKey:        getEnv("GEMINI_API_KEY",        ""),
     geminiModel:         getEnv("GEMINI_MODEL",          "gemini-3.6-flash"),
     sambanovaApiKey:     getEnv("SAMBANOVA_API_KEY",     ""),
+    // Cohere — universal last-resort fallback (see ProviderManager fallbacks).
+    // Uses Cohere's OpenAI-compatible endpoint so it streams standard SSE chunks.
+    cohereApiKey:        getEnv("COHERE_API_KEY",        ""),
+    cohereModel:         getEnv("COHERE_MODEL",          "command-r-plus-08-2024"),
+    // Multimodal sibling, used automatically when a request carries an image
+    // (computer mode's screenshots) — the text model above can't read one.
+    cohereVisionModel:   getEnv("COHERE_VISION_MODEL",   "command-a-vision-07-2025"),
     agnesApiKey:         getEnv("AGNES_API_KEY",         ""),
     agnesModel:          getEnv("AGNES_MODEL",           "agnes-2.0-flash"),
-    cerebrasApiKey:      getEnv("CEREBRAS_API_KEY",      ""),
-    // Confirmed directly against the live key via
-    //   curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer $CEREBRAS_API_KEY"
-    // — this key has access to exactly three models: gpt-oss-120b, gemma-4-31b,
-    // qwen-3.8-27b (no Llama models at all, despite Cerebras's docs listing
-    // some elsewhere — access varies per key/account). gpt-oss-120b is the
-    // largest/most capable of the three.
-    cerebrasModel:       getEnv("CEREBRAS_MODEL",        "gpt-oss-120b"),
-    googleMapsApiKey:    getEnv("GOOGLE_MAPS_API_KEY",   ""),
+    // Plugsky — OpenAI-compatible gateway. Streams native reasoning ("thinking")
+    // tokens when the selected model exposes them.
+    plugskyApiKey:       getEnv("PLUGSKY_API_KEY",       ""),
+    plugskyBaseUrl:      getEnv("PLUGSKY_BASE_URL",      "https://api.plugsky.com/v1"),
+    plugskyModel:        getEnv("PLUGSKY_MODEL",         "plugsky-reasoner"),
+    plugskyTemperature:  Number(getEnv("PLUGSKY_TEMPERATURE", "0.7")),
+    plugskyMaxTokens:    Number(getEnv("PLUGSKY_MAX_TOKENS",  "8192")),
+    // Streamed chain-of-thought panel. Set to "false" to turn the feature off globally.
+    thinkingEnabled:     getEnv("THINKING_ENABLED", "true") !== "false",
+    // Chess Arena — dedicated keys/models, isolated from the chat providers above.
+    chessMistralApiKey:    getEnv("CHESS_MISTRAL_API_KEY",    ""),
+    chessMistralModel:     getEnv("CHESS_MISTRAL_MODEL",      "mistral-small-latest"),
+    chessGroqApiKey:       getEnv("CHESS_GROQ_API_KEY",       ""),
+    chessGroqModel:        getEnv("CHESS_GROQ_MODEL",         "llama-3.3-70b-versatile"),
+    chessGeminiApiKey:     getEnv("CHESS_GEMINI_API_KEY",     ""),
+    chessGeminiModel:      getEnv("CHESS_GEMINI_MODEL",       "gemini-3.6-flash"),
+    chessOpenRouterApiKey: getEnv("CHESS_OPENROUTER_API_KEY", ""),
+    chessOpenRouterModel:  getEnv("CHESS_OPENROUTER_MODEL",   "openai/gpt-4o-mini"),
+    googleMapsApiKey:    getEnv("GOOGLE_MAPS_API_KEY", ""),
+    // Call Assistant (docs/vetroai-call-assistant.md). Speech-to-text and
+    // translation share the Groq key; the spoken voice is Google Cloud TTS.
+    googleTtsApiKey:       getEnv("GOOGLE_TTS_API_KEY",       ""),
+    callAsrModel:          getEnv("CALL_ASR_MODEL",           "whisper-large-v3-turbo"),
+    callTranslationModel:  getEnv("CALL_TRANSLATION_MODEL",   getEnv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     googleClientId:      getEnv("VITE_GOOGLE_CLIENT_ID", "592184427551-7hs7t358m2k3vn60amdv8vnm8b26oprt.apps.googleusercontent.com"),
+    // Firebase Authentication is what the frontend signs in against, so the
+    // bearer tokens this API receives are Firebase ID tokens. Verifying one
+    // needs only the project id — it is public, and is the token's `aud`.
+    firebaseProjectId:   getEnv("FIREBASE_PROJECT_ID", "vetroai"),
+    // Plans and critiques the agentic search loop. Small and fast on purpose —
+    // it writes queries and judges coverage, it does not answer the question,
+    // and it runs several times per request.
+    searchPlannerModel:  getEnv("SEARCH_PLANNER_MODEL", "llama-3.1-8b-instant"),
     enableCloudSessions: getEnv("ENABLE_CLOUD_SESSIONS", "false") === "true",
     twilioAccountSid:    getEnv("TWILIO_ACCOUNT_SID",    ""),
     twilioAuthToken:     getEnv("TWILIO_AUTH_TOKEN",     ""),
     twilioFromNumber:    getEnv("TWILIO_FROM_NUMBER",    ""),
     bookingNotificationPhones: getEnv("BOOKING_NOTIFICATION_PHONES", "8778508652,9994777865"),
-    tavilyApiKey:        getEnv("TAVILY_API_KEY",        ""),
-    // News feed. NEWS_API_KEY is provider-neutral; NEWSDATA_API_KEY is the
-    // older name for the same setting. The service is detected from the key's
-    // shape, and NEWS_PROVIDER (currents | newsdata | thenewsapi | newsapi)
-    // overrides that when detection is wrong. NEWS_API_LIMIT is plan-capped by
-    // some services, so it is only sent when set.
+    tavilyApiKey:        getEnv("TAVILY_API_KEY",         ""),
+    // NEWSDATA_API_KEY is the original name and still works; NEWS_API_KEY is
+    // the provider-neutral one, since the feed now speaks to whichever
+    // service the key belongs to.
     newsDataApiKey:      getEnv("NEWS_API_KEY", "") || getEnv("NEWSDATA_API_KEY", ""),
-    newsProvider:        getEnv("NEWS_PROVIDER",        ""),
-    newsLimit:           getEnv("NEWS_API_LIMIT",       ""),
+    // Optional override: currents | newsdata | thenewsapi | newsapi. Left
+    // empty, the provider is detected from the key's shape.
+    newsProvider:        getEnv("NEWS_PROVIDER",         ""),
+    // Optional per-request article cap. thenewsapi and currents both cap this
+    // per plan and reject anything over, so it is only sent when set.
+    newsLimit:           getEnv("NEWS_API_LIMIT",        ""),
+    apiSportsKey:        getEnv("API_SPORTS_KEY",         ""),
+    // ProKerala — Vedic astrology data (kundli, planet positions, dasha periods).
+    // OAuth2 client-credentials: exchanged for a short-lived bearer token, cached
+    // in prokeralaService until it expires.
+    prokeralaClientId:     getEnv("PROKERALA_CLIENT_ID",     ""),
+    prokeralaClientSecret: getEnv("PROKERALA_CLIENT_SECRET", ""),
     stripeSecretKey:        getEnv("STRIPE_SECRET_KEY",        ""),
     stripePublishableKey:   getEnv("STRIPE_PUBLISHABLE_KEY",   ""),
     stripeWebhookSecret:    getEnv("STRIPE_WEBHOOK_SECRET",    ""),

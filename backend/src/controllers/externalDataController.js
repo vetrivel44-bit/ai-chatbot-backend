@@ -76,12 +76,29 @@ async function latestNews(req, res, next) {
       throw new ApiError(status === 401 || status === 403 ? 503 : status, reason);
     }
 
-    // Always the newsdata-shaped `results` array the frontend news panel
-    // renders, whichever service answered.
+    // Always the newsdata-shaped `results` array the frontend panel renders,
+    // whichever service answered.
     return res.json({ results: normalizeNewsPayload(provider, payload) });
   } catch (error) {
     return next(error);
   }
 }
 
-module.exports = { latestNews };
+async function footballFixtures(req, res, next) {
+  try {
+    if (!config.apiSportsKey) throw new ApiError(503, "Football service is not configured.");
+    const scope = req.query.scope === "live" ? "live" : "today";
+    const params = new URLSearchParams();
+    if (scope === "live") params.set("live", "all");
+    else params.set("date", new Date().toISOString().slice(0, 10));
+
+    const data = await fetchJson(`https://v3.football.api-sports.io/fixtures?${params}`, {
+      headers: { "x-apisports-key": config.apiSportsKey },
+    });
+    return res.json(data);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { latestNews, footballFixtures };

@@ -65,7 +65,7 @@ test("falls back to a safe message when nothing was recorded", () => {
 test("provider ids are shown with their display names", () => {
   assert.equal(orchestrator.providerLabel("mistral"), "Mistral");
   assert.equal(orchestrator.providerLabel("chatgpt"), "ChatGPT");
-  assert.equal(orchestrator.providerLabel("sambanova"), "SambaNova");
+  assert.equal(orchestrator.providerLabel("fable"), "Claude Fable 5");
   assert.equal(orchestrator.providerLabel(undefined), "The AI model");
 });
 
@@ -73,6 +73,33 @@ test("provider ids are shown with their display names", () => {
 // ProviderManager.isConfigured() read it dynamically. When those two disagreed
 // the orchestrator would route to Mistral and the adapter would immediately
 // refuse, which surfaced as a generic failure with no way to tell what broke.
+test("the Mistral adapter reads its key at call time, matching ProviderManager", async () => {
+  const { config } = require("../src/config/env");
+  const providerManager = require("../src/services/ProviderManager");
+  const mistralAdapter = require("../src/providers/mistralAdapter");
+
+  const original = config.mistralApiKey;
+  try {
+    config.mistralApiKey = "";
+    assert.equal(providerManager.isConfigured("mistral"), false);
+    await assert.rejects(
+      () => mistralAdapter.generateStream([{ role: "user", content: "hi" }]),
+      /not configured/i,
+      "with no key, the adapter refuses"
+    );
+
+    // Set after module load: the adapter must now agree that it is configured.
+    config.mistralApiKey = "sk-set-after-load";
+    assert.equal(providerManager.isConfigured("mistral"), true);
+    await assert.rejects(
+      () => mistralAdapter.generateStream([{ role: "user", content: "hi" }]),
+      (err) => !/not configured/i.test(err.message),
+      "it must attempt the call rather than claim it has no key"
+    );
+  } finally {
+    config.mistralApiKey = original;
+  }
+});
 
 test("a missing key is reported differently from a rejected one", () => {
   const missing = orchestrator.classifyProviderError("Mistral API key not configured on the backend.");
