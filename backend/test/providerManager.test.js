@@ -44,7 +44,7 @@ test("selection fails fast when no provider is configured", () => {
 
 test("the AI Router models picked by name are answered by AI Router", () => {
   configureOnly("airouter");
-  for (const label of ["DeepSeek V4.1 Flash", "Mercury 2.5", "VetroAI", "vetroai"]) {
+  for (const label of ["DeepSeek V4.1 Flash", "Ling 3.0 Flash", "VetroAI", "vetroai"]) {
     assert.equal(providerManager.getBestProvider("normal", label), "airouter", label);
   }
 });
