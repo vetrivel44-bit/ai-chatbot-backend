@@ -9,9 +9,8 @@ const providerKeys = {
   chatgpt: "chatgptApiKey",
   fable: "fableRapidApiKey",
   groq: "groqApiKey",
-  mistral: "mistralApiKey",
+  airouter: "airouterApiKey",
   agnes: "agnesApiKey",
-  sambanova: "sambanovaApiKey",
   gemini: "geminiApiKey",
   cohere: "cohereApiKey",
 };

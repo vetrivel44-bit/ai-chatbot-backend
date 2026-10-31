@@ -14,7 +14,8 @@ if (!config.groqApiKey) {
 const MAX_VISION_IMAGES = 4;
 
 const groq = config.groqApiKey ? new Groq({ apiKey: config.groqApiKey }) : null;
-const mistralAvailable = Boolean(config.mistralApiKey);
+const airouterAdapter = require("../providers/airouterAdapter");
+const airouterAvailable = () => Boolean(config.airouterApiKey);
 
 const providerManager = require("../services/ProviderManager");
 const creditService = require("../services/creditService");
@@ -120,28 +121,8 @@ async function withRetry(operation, retries = 2, delay = 1000) {
 
 const AIOrchestrator = require("../services/AIOrchestrator");
 
-async function callMistralChat({ messages, temperature = 0.4, maxTokens = 120 }) {
-  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.mistralApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.mistralModel || "mistral-small-latest",
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: false,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new ApiError(response.status, `Mistral service error: ${detail.slice(0, 200)}`);
-  }
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+async function callAirouterChat({ messages, temperature = 0.4, maxTokens = 120 }) {
+  return airouterAdapter.complete(messages, { temperature, maxTokens });
 }
 
 // ── MAIN CHAT HANDLER ─────────────────────────────────────────────────────────
@@ -274,14 +255,13 @@ async function generateTitle(req, res) {
   const firstMessage = String(req.body?.firstMessage || "").trim();
   if (!firstMessage) throw new ApiError(400, "firstMessage is required");
 
-  if (!groq && mistralAvailable) {
-    const completion = await callMistralChat({
-      model: config.mistralModel,
+  if (!groq && airouterAvailable()) {
+    const completion = await callAirouterChat({
       messages: [
         { role: "system", content: "Generate a 4-6 word summary title for this chat. Never use simple greetings like 'hi' or 'hello' as a title. Include a relevant emoji at the start. Return plain text only." },
         { role: "user", content: firstMessage.slice(0, 400) },
       ],
-      temperature: config.mistralTemperature,
+      temperature: config.airouterTemperature,
       maxTokens: 28,
     });
     const title = completion.trim().replace(/^["']|["']$/g, "").slice(0, 64) || "New Chat";
@@ -352,8 +332,8 @@ async function followUps(req, res) {
       );
       return completion?.choices?.[0]?.message?.content || "";
     };
-  } else if (mistralAvailable) {
-    callModel = async ({ system, user, maxTokens, temperature }) => callMistralChat({
+  } else if (airouterAvailable()) {
+    callModel = async ({ system, user, maxTokens, temperature }) => callAirouterChat({
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
       temperature,
       maxTokens,

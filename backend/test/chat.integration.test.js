@@ -8,9 +8,8 @@ function clearProviderKeys() {
   for (const key of [
     "chatgptApiKey",
     "groqApiKey",
-    "mistralApiKey",
     "agnesApiKey",
-    "sambanovaApiKey",
+    "airouterApiKey",
     "geminiApiKey",
   ]) config[key] = "";
 }
