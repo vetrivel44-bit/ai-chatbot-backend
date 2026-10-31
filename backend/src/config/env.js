@@ -31,9 +31,9 @@ module.exports = {
     // default's fast tier — templated suggestions were mostly the small model
     // reaching for a familiar shape instead of reading the answer.
     groqFollowUpModel:   getEnv("GROQ_FOLLOWUP_MODEL",  "llama-3.3-70b-versatile"),
-    // AI Router (ai-router.dev) — OpenAI-compatible. VetroAI uses only DeepSeek V4.1 Flash there.
+    // AI Router (airouter.in) — OpenAI-compatible. VetroAI uses only DeepSeek V4.1 Flash there.
     airouterApiKey:      getEnv("AIROUTER_API_KEY",      ""),
-    airouterBaseUrl:     getEnv("AIROUTER_BASE_URL",     "https://api.ai-router.dev/v1"),
+    airouterBaseUrl:     getEnv("AIROUTER_BASE_URL",     "https://api.airouter.in/v1"),
     airouterModel:       getEnv("AIROUTER_MODEL",        "deepseek/deepseek-v4.1-flash"),
     airouterTemperature: Number(getEnv("AIROUTER_TEMPERATURE", "0.7")),
     airouterMaxTokens:   Number(getEnv("AIROUTER_MAX_TOKENS",  "8192")),
