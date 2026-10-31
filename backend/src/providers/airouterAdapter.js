@@ -3,12 +3,12 @@ const logger = require("../utils/logger");
 const ApiError = require("../utils/apiError");
 
 // AI Router serves three models for VetroAI, picked by name in the model picker:
-// DeepSeek V4.1 Flash (the default), Mercury 2.5, and Qwen 3.7 Flash (shown as
-// "VetroAI"). AIROUTER_MODEL, AIROUTER_MERCURY_MODEL and AIROUTER_QWEN_MODEL
+// DeepSeek V4.1 Flash (the default), Ling 3.0 Flash, and Qwen 3.7 Flash (shown as
+// "VetroAI"). AIROUTER_MODEL, AIROUTER_LING_MODEL and AIROUTER_QWEN_MODEL
 // override the ids only if AI Router names them differently.
 const MODEL = "deepseek/deepseek-v4.1-flash";
-const MERCURY_MODEL = "inception/mercury-2.5";
-const QWEN_MODEL = "qwen/qwen3.7-flash";
+const LING_MODEL = "inclusionai/ling-3.0-flash";
+const QWEN_MODEL = "alibaba/qwen3.7-flash";
 
 // AI Router (airouter.in) exposes an OpenAI-compatible /chat/completions endpoint,
 // so the stream is handed back untouched and parsed by AIOrchestrator.pipeStream
@@ -23,12 +23,12 @@ function defaultModel() {
 }
 
 /**
- * "Mercury 2.5" → Mercury, "VetroAI" / "Qwen…" → Qwen 3.7 Flash,
+ * "Ling 3.0 Flash" → Ling, "VetroAI" / "Qwen…" → Qwen 3.7 Flash,
  * "DeepSeek V4.1 Flash" / "AI Router" → DeepSeek, else null.
  */
 function modelFor(label) {
   const text = String(label || "").trim();
-  if (/mercury/i.test(text)) return config.airouterMercuryModel || MERCURY_MODEL;
+  if (/\bling\b/i.test(text)) return config.airouterLingModel || LING_MODEL;
   if (/qwen|^vetro\s?ai$/i.test(text)) return config.airouterQwenModel || QWEN_MODEL;
   if (/deepseek|ai[\s_-]?router/i.test(text)) return defaultModel();
   return null;
@@ -37,7 +37,7 @@ function modelFor(label) {
 /** The picker name of an AI Router model id, for labelling the reply. */
 function displayName(modelId) {
   const id = String(modelId || defaultModel());
-  if (/mercury/i.test(id)) return "Mercury 2.5";
+  if (/(^|\/)ling-/i.test(id)) return "Ling 3.0 Flash";
   if (/qwen/i.test(id)) return "VetroAI";
   return "DeepSeek V4.1 Flash";
 }
@@ -80,8 +80,8 @@ function isUnknownModelError(status, detail) {
 
 // The model ids above are VetroAI's best guess at AI Router's names. When AI
 // Router rejects one, its model list (/v1/models) is fetched once and the
-// closest match is used from then on, so a differently named id ("mercury-2.5",
-// "qwen3.7-flash", "inception/mercury-2-5"…) still works without a config change.
+// closest match is used from then on, so a differently named id ("ling-3.0-flash",
+// "qwen3.7-flash", "inclusionai/ling-3-0-flash"…) still works without a config change.
 const resolvedModels = new Map();
 let modelListCache = null;
 
@@ -126,7 +126,7 @@ async function resolveRejectedModel(key, model) {
     logger.warn("airouterAdapter.modelRejected", {
       model,
       useInstead: match || "(no match)",
-      available: available.slice(0, 80).join(", "),
+      available: available.join(", "),
     });
     return match && match !== model ? match : null;
   } catch (err) {
@@ -136,21 +136,35 @@ async function resolveRejectedModel(key, model) {
 }
 
 // Sends one request, retrying a short-lived rate limit. Returns the ok Response.
-async function send(body, { stream, timeoutMs, model: wantedModel = defaultModel() }) {
+// For a stream, timeoutMs bounds only the wait for the reply to start: a long
+// answer may keep streaming past it (the orchestrator's idle watchdog guards a
+// stalled stream). It used to abort the whole reply at 30s.
+// No reasoning_effort is sent: with it, airouter.in held DeepSeek and Qwen
+// requests for over 30s without answering (without it they answer in seconds).
+async function send(body, { stream, timeoutMs, model: wantedModel = defaultModel() } = {}) {
   const key = apiKey();
   let model = resolvedModels.get(wantedModel) || wantedModel;
-  const request = () => fetch(endpoint(), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      // Some routers read the key from x-api-key instead of Authorization.
-      "x-api-key": key,
-      "Content-Type": "application/json",
-      ...(stream ? { Accept: "text/event-stream" } : {}),
-    },
-    body: JSON.stringify({ ...body, model, stream }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const request = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(`AI Router did not respond within ${timeoutMs / 1000}s`)), timeoutMs);
+    try {
+      return await fetch(endpoint(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          // Some routers read the key from x-api-key instead of Authorization.
+          "x-api-key": key,
+          "Content-Type": "application/json",
+          ...(stream ? { Accept: "text/event-stream" } : {}),
+        },
+        body: JSON.stringify({ ...body, model, stream }),
+        signal: controller.signal,
+      });
+    } finally {
+      if (stream) clearTimeout(timer);
+      else timer.unref?.();
+    }
+  };
 
   logger.info("airouterAdapter.request", { model, stream });
   let res = await request();
@@ -184,16 +198,37 @@ async function generateStream(messages, options = {}) {
   // fallback from another provider gets the default model.
   const { temperature, maxTokens, airouterModel } = options;
   try {
+    const startedAt = Date.now();
+    const model = airouterModel || defaultModel();
     const res = await send({
       messages,
       temperature: temperature ?? config.airouterTemperature ?? 0.7,
       max_tokens: maxTokens ?? config.airouterMaxTokens ?? 8192,
-    }, { stream: true, timeoutMs: 30000, model: airouterModel || defaultModel() });
-    return res.body;
+    }, { stream: true, timeoutMs: 30000, model });
+    return timed(res.body, model, startedAt, Date.now() - startedAt);
   } catch (err) {
     logger.error("airouterAdapter.generateStream", { error: err.message });
     throw err;
   }
+}
+
+// Logs where a reply's time goes: until AI Router answered, until the first
+// streamed bytes, and until the end — so a slow reply shows whether the wait
+// was before the model started or while it wrote.
+function timed(body, model, startedAt, headersMs) {
+  if (!body?.pipeThrough) return body;
+  let firstChunkMs = null;
+  let bytes = 0;
+  return body.pipeThrough(new TransformStream({
+    transform(chunk, controller) {
+      if (firstChunkMs === null) firstChunkMs = Date.now() - startedAt;
+      bytes += chunk?.byteLength || 0;
+      controller.enqueue(chunk);
+    },
+    flush() {
+      logger.info("airouterAdapter.timing", { model, headersMs, firstChunkMs, totalMs: Date.now() - startedAt, bytes });
+    },
+  }));
 }
 
 // Non-streaming completion for short side tasks (chat titles, follow-ups,
@@ -208,7 +243,7 @@ module.exports = {
   generateStream,
   complete,
   MODEL,
-  MERCURY_MODEL,
+  LING_MODEL,
   QWEN_MODEL,
   modelFor,
   displayName,

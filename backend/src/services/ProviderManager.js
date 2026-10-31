@@ -149,8 +149,8 @@ class ProviderManager {
     // If user explicitly chose a provider, try it first if not suspended
     if (preferredProvider && !["undefined", "auto"].includes(preferredProvider.toLowerCase())) {
       // The picker labels AI Router's models by name: DeepSeek V4.1 Flash,
-      // Mercury 2.5 and VetroAI (Qwen 3.7 Flash).
-      const pref = /deepseek|mercury|qwen|ai[\s_-]?router|^vetro\s?ai$/i.test(preferredProvider.trim()) ? "airouter" : preferredProvider.toLowerCase();
+      // Ling 3.0 Flash and VetroAI (Qwen 3.7 Flash).
+      const pref = /deepseek|\bling\b|qwen|ai[\s_-]?router|^vetro\s?ai$/i.test(preferredProvider.trim()) ? "airouter" : preferredProvider.toLowerCase();
       if (this.providers[pref] && this.isConfigured(pref)) {
         // Unsuspend if cooldown has passed
         const p = this.providers[pref];
