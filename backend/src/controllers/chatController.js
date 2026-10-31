@@ -232,7 +232,9 @@ async function chat(req, res) {
       webSearch,
       activePlugins,
       effort,
-      options: { temperature, maxTokens }
+      // Which AI Router model (DeepSeek, Mercury or VetroAI/Qwen), in a field of
+      // its own so a fallback provider never receives it.
+      options: { temperature, maxTokens, airouterModel: airouterAdapter.modelFor(req.body?.modelLabel || provider) || undefined }
     }, res) === true;
   } catch (err) {
     logger.error("chat.request.failed", { reqId, error: err.message });

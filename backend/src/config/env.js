@@ -31,10 +31,12 @@ module.exports = {
     // default's fast tier — templated suggestions were mostly the small model
     // reaching for a familiar shape instead of reading the answer.
     groqFollowUpModel:   getEnv("GROQ_FOLLOWUP_MODEL",  "llama-3.3-70b-versatile"),
-    // AI Router (airouter.in) — OpenAI-compatible. VetroAI uses only DeepSeek V4.1 Flash there.
+    // AI Router (airouter.in) — OpenAI-compatible. VetroAI uses DeepSeek V4.1 Flash, Mercury 2.5 and Qwen 3.7 Flash (shown as "VetroAI") there.
     airouterApiKey:      getEnv("AIROUTER_API_KEY",      ""),
     airouterBaseUrl:     getEnv("AIROUTER_BASE_URL",     "https://api.airouter.in/v1"),
     airouterModel:       getEnv("AIROUTER_MODEL",        "deepseek/deepseek-v4.1-flash"),
+    airouterMercuryModel: getEnv("AIROUTER_MERCURY_MODEL", "inception/mercury-2.5"),
+    airouterQwenModel:   getEnv("AIROUTER_QWEN_MODEL",   "qwen/qwen3.7-flash"),
     airouterTemperature: Number(getEnv("AIROUTER_TEMPERATURE", "0.7")),
     airouterMaxTokens:   Number(getEnv("AIROUTER_MAX_TOKENS",  "8192")),
     chatgptApiKey:       getEnv("CHATGPT_API_KEY",       ""),
@@ -50,8 +52,8 @@ module.exports = {
     // Multimodal sibling, used automatically when a request carries an image
     // (computer mode's screenshots) — the text model above can't read one.
     cohereVisionModel:   getEnv("COHERE_VISION_MODEL",   "command-a-vision-07-2025"),
+    // Agnes AI — image and video generation only; no longer a chat model.
     agnesApiKey:         getEnv("AGNES_API_KEY",         ""),
-    agnesModel:          getEnv("AGNES_MODEL",           "agnes-2.0-flash"),
     // Plugsky — OpenAI-compatible gateway. Streams native reasoning ("thinking")
     // tokens when the selected model exposes them.
     plugskyApiKey:       getEnv("PLUGSKY_API_KEY",       ""),
