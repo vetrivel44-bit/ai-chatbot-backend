@@ -7,13 +7,13 @@ const orchestrator = require("../src/services/AIOrchestrator");
 
 const ALL_KEYS = [
   "plugskyApiKey", "chatgptApiKey", "fableRapidApiKey", "groqApiKey",
-  "airouterApiKey", "agnesApiKey", "geminiApiKey", "cohereApiKey",
+  "airouterApiKey", "geminiApiKey", "cohereApiKey",
 ];
 
 function configureOnly(names) {
   const keyFor = {
     plugsky: "plugskyApiKey", chatgpt: "chatgptApiKey", fable: "fableRapidApiKey",
-    groq: "groqApiKey", airouter: "airouterApiKey", agnes: "agnesApiKey",
+    groq: "groqApiKey", airouter: "airouterApiKey",
     gemini: "geminiApiKey", cohere: "cohereApiKey",
   };
   for (const k of ALL_KEYS) config[k] = "";

@@ -10,7 +10,6 @@ const providerKeys = {
   fable: "fableRapidApiKey",
   groq: "groqApiKey",
   airouter: "airouterApiKey",
-  agnes: "agnesApiKey",
   gemini: "geminiApiKey",
   cohere: "cohereApiKey",
 };
@@ -32,13 +31,20 @@ test("auto selection only chooses a configured provider", () => {
 
 test("an unconfigured preferred provider falls back to a configured provider", () => {
   configureOnly("groq");
-  assert.equal(providerManager.getBestProvider("normal", "Agnes"), "groq");
-  assert.equal(providerManager.getFallbackProvider("agnes"), "groq");
+  assert.equal(providerManager.getBestProvider("normal", "Gemini"), "groq");
+  assert.equal(providerManager.getFallbackProvider("gemini"), "groq");
 });
 
 test("selection fails fast when no provider is configured", () => {
   configureOnly(null);
   assert.equal(providerManager.getBestProvider("normal", "Auto"), null);
-  assert.equal(providerManager.getFallbackProvider("agnes"), null);
-  assert.equal(providerManager.getStats().agnes.status, "unconfigured");
+  assert.equal(providerManager.getFallbackProvider("gemini"), null);
+  assert.equal(providerManager.getStats().gemini.status, "unconfigured");
+});
+
+test("the AI Router models picked by name are answered by AI Router", () => {
+  configureOnly("airouter");
+  for (const label of ["DeepSeek V4.1 Flash", "Mercury 2.5", "VetroAI", "vetroai"]) {
+    assert.equal(providerManager.getBestProvider("normal", label), "airouter", label);
+  }
 });

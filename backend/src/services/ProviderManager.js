@@ -2,7 +2,6 @@ const logger = require("../utils/logger");
 const { config } = require("../config/env");
 const groqAdapter = require("../providers/groqAdapter");
 const geminiAdapter = require("../providers/geminiAdapter");
-const agnesAdapter = require("../providers/agnesAdapter");
 const chatgptAdapter = require("../providers/chatgptAdapter");
 const fableAdapter = require("../providers/fableAdapter");
 const plugskyAdapter = require("../providers/plugskyAdapter");
@@ -22,7 +21,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "airouter", "agnes", "gemini", "cohere"],
+        fallbacks: ["plugsky", "groq", "airouter", "gemini", "cohere"],
       },
       fable: {
         adapter: fableAdapter,
@@ -34,7 +33,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "chatgpt", "groq", "airouter", "agnes", "gemini", "cohere"],
+        fallbacks: ["plugsky", "chatgpt", "groq", "airouter", "gemini", "cohere"],
       },
       plugsky: {
         adapter: plugskyAdapter,
@@ -46,7 +45,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["fable", "chatgpt", "groq", "airouter", "agnes", "gemini", "cohere"],
+        fallbacks: ["fable", "chatgpt", "groq", "airouter", "gemini", "cohere"],
       },
       groq: {
         adapter: groqAdapter,
@@ -58,7 +57,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "chatgpt", "agnes", "airouter", "gemini", "cohere"],
+        fallbacks: ["plugsky", "chatgpt", "airouter", "gemini", "cohere"],
       },
       airouter: {
         adapter: airouterAdapter,
@@ -70,19 +69,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "agnes", "gemini", "cohere"],
-      },
-      agnes: {
-        adapter: agnesAdapter,
-        weight: 100,
-        score: 100,
-        latency: 0,
-        successRate: 1,
-        consecutiveErrors: 0,
-        isSuspended: false,
-        lastFailure: 0,
-        cooldown: 20000,
-        fallbacks: ["plugsky", "airouter", "groq", "gemini", "cohere"],
+        fallbacks: ["plugsky", "groq", "gemini", "cohere"],
       },
       gemini: {
         adapter: geminiAdapter,
@@ -94,7 +81,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "airouter", "agnes", "cohere"],
+        fallbacks: ["plugsky", "groq", "airouter", "cohere"],
       },
       cohere: {
         adapter: cohereAdapter,
@@ -109,7 +96,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "airouter", "agnes", "gemini"],
+        fallbacks: ["plugsky", "groq", "airouter", "gemini"],
       },
     };
 
@@ -127,7 +114,6 @@ class ProviderManager {
       fable: Boolean(config.fableRapidApiKey),
       groq: Boolean(config.groqApiKey),
       airouter: Boolean(config.airouterApiKey),
-      agnes: Boolean(config.agnesApiKey),
       gemini: Boolean(config.geminiApiKey),
       cohere: Boolean(config.cohereApiKey),
     };
@@ -162,8 +148,9 @@ class ProviderManager {
   getBestProvider(mode, preferredProvider) {
     // If user explicitly chose a provider, try it first if not suspended
     if (preferredProvider && !["undefined", "auto"].includes(preferredProvider.toLowerCase())) {
-      // The picker labels DeepSeek V4.1 Flash by name; AI Router serves it.
-      const pref = /deepseek|ai[\s_-]?router/i.test(preferredProvider) ? "airouter" : preferredProvider.toLowerCase();
+      // The picker labels AI Router's models by name: DeepSeek V4.1 Flash,
+      // Mercury 2.5 and VetroAI (Qwen 3.7 Flash).
+      const pref = /deepseek|mercury|qwen|ai[\s_-]?router|^vetro\s?ai$/i.test(preferredProvider.trim()) ? "airouter" : preferredProvider.toLowerCase();
       if (this.providers[pref] && this.isConfigured(pref)) {
         // Unsuspend if cooldown has passed
         const p = this.providers[pref];
@@ -218,7 +205,7 @@ class ProviderManager {
 
   getFallbackProvider(failedProvider, excludedProviders = []) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["plugsky", "gemini", "airouter", "groq", "agnes", "cohere"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["plugsky", "gemini", "airouter", "groq", "cohere"];
     const excluded = new Set([failedProvider, ...excludedProviders]);
 
     // Auto-expire cooled-down suspensions first
