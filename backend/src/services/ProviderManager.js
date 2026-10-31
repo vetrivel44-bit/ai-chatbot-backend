@@ -2,12 +2,11 @@ const logger = require("../utils/logger");
 const { config } = require("../config/env");
 const groqAdapter = require("../providers/groqAdapter");
 const geminiAdapter = require("../providers/geminiAdapter");
-const mistralAdapter = require("../providers/mistralAdapter");
-const sambanovaAdapter = require("../providers/sambanovaAdapter");
 const agnesAdapter = require("../providers/agnesAdapter");
 const chatgptAdapter = require("../providers/chatgptAdapter");
 const fableAdapter = require("../providers/fableAdapter");
 const plugskyAdapter = require("../providers/plugskyAdapter");
+const airouterAdapter = require("../providers/airouterAdapter");
 const cohereAdapter = require("../providers/cohereAdapter");
 
 class ProviderManager {
@@ -23,7 +22,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+        fallbacks: ["plugsky", "groq", "airouter", "agnes", "gemini", "cohere"],
       },
       fable: {
         adapter: fableAdapter,
@@ -35,7 +34,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "chatgpt", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+        fallbacks: ["plugsky", "chatgpt", "groq", "airouter", "agnes", "gemini", "cohere"],
       },
       plugsky: {
         adapter: plugskyAdapter,
@@ -47,7 +46,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["fable", "chatgpt", "groq", "mistral", "agnes", "sambanova", "gemini", "cohere"],
+        fallbacks: ["fable", "chatgpt", "groq", "airouter", "agnes", "gemini", "cohere"],
       },
       groq: {
         adapter: groqAdapter,
@@ -59,10 +58,10 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "chatgpt", "agnes", "mistral", "sambanova", "gemini", "cohere"],
+        fallbacks: ["plugsky", "chatgpt", "agnes", "airouter", "gemini", "cohere"],
       },
-      mistral: {
-        adapter: mistralAdapter,
+      airouter: {
+        adapter: airouterAdapter,
         weight: 90,
         score: 90,
         latency: 0,
@@ -71,7 +70,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "sambanova", "agnes", "gemini", "cohere"],
+        fallbacks: ["plugsky", "groq", "agnes", "gemini", "cohere"],
       },
       agnes: {
         adapter: agnesAdapter,
@@ -83,19 +82,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "mistral", "groq", "sambanova", "gemini", "cohere"],
-      },
-      sambanova: {
-        adapter: sambanovaAdapter,
-        weight: 80,
-        score: 80,
-        latency: 0,
-        successRate: 1,
-        consecutiveErrors: 0,
-        isSuspended: false,
-        lastFailure: 0,
-        cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "mistral", "agnes", "gemini", "cohere"],
+        fallbacks: ["plugsky", "airouter", "groq", "gemini", "cohere"],
       },
       gemini: {
         adapter: geminiAdapter,
@@ -107,7 +94,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "cohere"],
+        fallbacks: ["plugsky", "groq", "airouter", "agnes", "cohere"],
       },
       cohere: {
         adapter: cohereAdapter,
@@ -122,7 +109,7 @@ class ProviderManager {
         isSuspended: false,
         lastFailure: 0,
         cooldown: 20000,
-        fallbacks: ["plugsky", "groq", "mistral", "agnes", "sambanova", "gemini"],
+        fallbacks: ["plugsky", "groq", "airouter", "agnes", "gemini"],
       },
     };
 
@@ -139,9 +126,8 @@ class ProviderManager {
       chatgpt: Boolean(config.chatgptApiKey),
       fable: Boolean(config.fableRapidApiKey),
       groq: Boolean(config.groqApiKey),
-      mistral: Boolean(config.mistralApiKey),
+      airouter: Boolean(config.airouterApiKey),
       agnes: Boolean(config.agnesApiKey),
-      sambanova: Boolean(config.sambanovaApiKey),
       gemini: Boolean(config.geminiApiKey),
       cohere: Boolean(config.cohereApiKey),
     };
@@ -176,7 +162,8 @@ class ProviderManager {
   getBestProvider(mode, preferredProvider) {
     // If user explicitly chose a provider, try it first if not suspended
     if (preferredProvider && !["undefined", "auto"].includes(preferredProvider.toLowerCase())) {
-      const pref = preferredProvider.toLowerCase();
+      // The picker labels DeepSeek V4.1 Flash by name; AI Router serves it.
+      const pref = /deepseek|ai[\s_-]?router/i.test(preferredProvider) ? "airouter" : preferredProvider.toLowerCase();
       if (this.providers[pref] && this.isConfigured(pref)) {
         // Unsuspend if cooldown has passed
         const p = this.providers[pref];
@@ -223,9 +210,6 @@ class ProviderManager {
       } else if (mode === "deep_search" || mode === "analyst") {
         if (a === "gemini") scoreA += 50;
         if (b === "gemini") scoreB += 50;
-      } else if (mode === "creative") {
-        if (a === "mistral") scoreA += 50;
-        if (b === "mistral") scoreB += 50;
       }
 
       return scoreB - scoreA;
@@ -234,7 +218,7 @@ class ProviderManager {
 
   getFallbackProvider(failedProvider, excludedProviders = []) {
     const p = this.providers[failedProvider];
-    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["plugsky", "gemini", "sambanova", "mistral", "groq", "agnes", "cohere"];
+    const fallbackList = (p && p.fallbacks) ? p.fallbacks : ["plugsky", "gemini", "airouter", "groq", "agnes", "cohere"];
     const excluded = new Set([failedProvider, ...excludedProviders]);
 
     // Auto-expire cooled-down suspensions first

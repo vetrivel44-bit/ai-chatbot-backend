@@ -572,7 +572,8 @@ const LANGS = {
   }},
 };
 
-const PROVIDERS = ["Agnes", "ChatGPT", "Groq", "Gemini", "Mistral", "SambaNova"];
+// "DeepSeek V4.1 Flash" is served by AI Router on the backend (providers/airouterAdapter.js).
+const PROVIDERS = ["Agnes", "ChatGPT", "Groq", "Gemini", "DeepSeek V4.1 Flash"];
 
 const MODES_LIST = [
   { id: "normal", name: "Normal Chat", icon: "Bot", desc: "General conversation and assistant" },
@@ -3957,10 +3958,9 @@ export default function App() {
 
   const MULTI_AI_MODELS = [
     { name: "Agnes 2.0",  id: "agnes",     color: "#3b82f6" },
-    { name: "Mistral",    id: "mistral",   color: "#f97316" },
+    { name: "DeepSeek",   id: "airouter",  color: "#4d6bfe" },
     { name: "Groq",       id: "groq",      color: "#10b981" },
     { name: "Gemini",     id: "gemini",    color: "#8b5cf6" },
-    { name: "SambaNova",  id: "sambanova", color: "#ec4899" },
     { name: "Web Search", id: "_web",      color: "#06b6d4", isWeb: true },
   ];
 
@@ -4886,7 +4886,7 @@ Write the definitive, comprehensive answer with proper markdown formatting (head
         <div className="auth-hero-content">
           <div className="auth-hero-logo">
             <VetroLogo width={160} />
-            <div className="logo-ver" style={{ marginTop: 6 }}>v2.3 · Powered by Mistral</div>
+            <div className="logo-ver" style={{ marginTop: 6 }}>v2.3</div>
           </div>
           <h1 className="auth-hero-headline">Your AI study<br />companion.</h1>
           <p className="auth-hero-sub">Smart answers, live web search, YouTube notes, image generation, code playground and more — all in one place.</p>

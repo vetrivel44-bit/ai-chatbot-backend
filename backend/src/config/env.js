@@ -31,17 +31,18 @@ module.exports = {
     // default's fast tier — templated suggestions were mostly the small model
     // reaching for a familiar shape instead of reading the answer.
     groqFollowUpModel:   getEnv("GROQ_FOLLOWUP_MODEL",  "llama-3.3-70b-versatile"),
-    mistralApiKey:       getEnv("MISTRAL_API_KEY",       ""),
-    mistralModel:        getEnv("MISTRAL_MODEL",        "mistral-small-latest"),
-    mistralTemperature:  Number(getEnv("MISTRAL_TEMPERATURE", "0.7")),
-    mistralMaxTokens:    Number(getEnv("MISTRAL_MAX_TOKENS",  "8192")),
+    // AI Router (ai-router.dev) — OpenAI-compatible. VetroAI uses only DeepSeek V4.1 Flash there.
+    airouterApiKey:      getEnv("AIROUTER_API_KEY",      ""),
+    airouterBaseUrl:     getEnv("AIROUTER_BASE_URL",     "https://api.ai-router.dev/v1"),
+    airouterModel:       getEnv("AIROUTER_MODEL",        "deepseek/deepseek-v4.1-flash"),
+    airouterTemperature: Number(getEnv("AIROUTER_TEMPERATURE", "0.7")),
+    airouterMaxTokens:   Number(getEnv("AIROUTER_MAX_TOKENS",  "8192")),
     chatgptApiKey:       getEnv("CHATGPT_API_KEY",       ""),
     fableRapidApiKey:    getEnv("FABLE_RAPIDAPI_KEY",    getEnv("CHATGPT_API_KEY", "")),
     fableApiHost:        getEnv("FABLE_API_HOST",        "claude-fable-5-api.p.rapidapi.com"),
     fableApiUrl:         getEnv("FABLE_API_URL",         "https://claude-fable-5-api.p.rapidapi.com/n9zkopuh8fn4eqyi5xy5bqr3tt66mkt3"),
     geminiApiKey:        getEnv("GEMINI_API_KEY",        ""),
     geminiModel:         getEnv("GEMINI_MODEL",          "gemini-3.6-flash"),
-    sambanovaApiKey:     getEnv("SAMBANOVA_API_KEY",     ""),
     // Cohere — universal last-resort fallback (see ProviderManager fallbacks).
     // Uses Cohere's OpenAI-compatible endpoint so it streams standard SSE chunks.
     cohereApiKey:        getEnv("COHERE_API_KEY",        ""),
@@ -61,8 +62,6 @@ module.exports = {
     // Streamed chain-of-thought panel. Set to "false" to turn the feature off globally.
     thinkingEnabled:     getEnv("THINKING_ENABLED", "true") !== "false",
     // Chess Arena — dedicated keys/models, isolated from the chat providers above.
-    chessMistralApiKey:    getEnv("CHESS_MISTRAL_API_KEY",    ""),
-    chessMistralModel:     getEnv("CHESS_MISTRAL_MODEL",      "mistral-small-latest"),
     chessGroqApiKey:       getEnv("CHESS_GROQ_API_KEY",       ""),
     chessGroqModel:        getEnv("CHESS_GROQ_MODEL",         "llama-3.3-70b-versatile"),
     chessGeminiApiKey:     getEnv("CHESS_GEMINI_API_KEY",     ""),

@@ -1013,7 +1013,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
   providerLabel(name) {
     const labels = {
       chatgpt: "ChatGPT", fable: "Claude Fable 5", plugsky: "Plugsky", groq: "Groq",
-      mistral: "Mistral", agnes: "Agnes", sambanova: "SambaNova", gemini: "Gemini", cohere: "Cohere",
+      airouter: "DeepSeek V4.1 Flash", agnes: "Agnes", gemini: "Gemini", cohere: "Cohere",
     };
     return labels[name] || name || "The AI model";
   }
@@ -1286,7 +1286,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
       return reasoning ? { content: "", reasoning } : empty;
     }
 
-    // 2. Handle String Chunks (Mistral, SambaNova, Gemini raw text stream)
+    // 2. Handle String Chunks (Gemini raw text stream)
     const rawText = chunk;
 
     // Handle Gemini raw JSON stream (often wrapped in [ ])
@@ -1339,7 +1339,7 @@ Choose the single best-fitting visualization block(s) from the formats below:
     }
 
     // If using SSE provider, ignore comments or heartbeats that carry no data frame
-    if (["groq", "mistral", "sambanova", "agnes", "plugsky"].includes(provider)) {
+    if (["groq", "airouter", "agnes", "plugsky"].includes(provider)) {
       return empty;
     }
 
