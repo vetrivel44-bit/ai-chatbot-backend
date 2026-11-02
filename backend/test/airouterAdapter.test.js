@@ -199,3 +199,14 @@ test("Ling falls back to the closest listed Ling 3.0 Flash variant", () => {
   assert.equal(airouter.matchModel("inclusionai/ling-3.0-flash", ["inclusionai/ling-3.0-flash-sante", "zai/glm-4.7-flash"]), "inclusionai/ling-3.0-flash-sante");
   assert.equal(airouter.modelFor("Kling 2"), null, "only Ling itself");
 });
+
+test("Grok 4.20 Non-Reasoning is sent to AI Router without changing the other models", withFetch([OK], async (calls) => {
+  assert.equal(airouter.modelFor("Grok 4.20 Non-Reasoning"), "spacexai/grok-4.20-non-reasoning");
+  assert.equal(airouter.modelFor("Grok 4.6"), null);
+  await airouter.generateStream([{ role: "user", content: "hi" }], { airouterModel: airouter.modelFor("Grok 4.20 Non-Reasoning") });
+  assert.equal(calls[0].body.model, "spacexai/grok-4.20-non-reasoning");
+  assert.equal(airouter.displayName(airouter.GROK_MODEL), "Grok 4.20 Non-Reasoning");
+  assert.equal(airouter.modelFor("Ling 3.0 Flash"), airouter.LING_MODEL);
+  assert.equal(airouter.modelFor("VetroAI"), airouter.QWEN_MODEL);
+  assert.equal(airouter.modelFor("DeepSeek V4.1 Flash"), airouter.MODEL);
+}));
