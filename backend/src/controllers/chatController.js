@@ -246,7 +246,8 @@ async function chat(req, res) {
     cleanup();
     // Only bill a turn that actually produced an answer — a request that
     // exhausted every provider, or failed outright, is free.
-    if (billingUserId && answered) {
+    // A screen-control step is one move of a Computer run, not a message.
+    if (billingUserId && answered && mode !== "computer_use") {
       creditService.consumeCredit(billingUserId, 1, "chat_message", { reqId, mode, provider }).catch(() => {});
     }
     res.end();

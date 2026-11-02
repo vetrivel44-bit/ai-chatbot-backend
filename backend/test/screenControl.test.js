@@ -55,3 +55,14 @@ test("the screen-control prompt points on the grid, reports success honestly, an
   assert.match(sys, /nothing on the screen changed/);
   assert.doesNotMatch(sys, /Coordinates are pixels/);
 });
+
+test("the screen agent is told the keys, shortcuts and waiting it can use", async () => {
+  const orchestrator = require("../src/services/AIOrchestrator");
+  const prompt = await orchestrator.buildSystemPrompt("computer_use", { userQuery: "open a new tab", clock: {} });
+  assert.match(prompt, /key is a letter A-Z, a digit 0-9, F1-F12/);
+  assert.match(prompt, /CTRL\+L focuses the address bar; then "type" a web address, or words to search the web/);
+  assert.match(prompt, /CTRL\+T opens a new tab/);
+  assert.match(prompt, /"wait": \{seconds\}/);
+  assert.match(prompt, /"scroll": \{amount, x, y \(optional\)\}/);
+  assert.doesNotMatch(prompt, /a single letter A\/C\/V\/X\/Z/);
+});
