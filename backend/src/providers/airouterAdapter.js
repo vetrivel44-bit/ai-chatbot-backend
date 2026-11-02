@@ -4,11 +4,14 @@ const ApiError = require("../utils/apiError");
 
 // AI Router serves three models for VetroAI, picked by name in the model picker:
 // DeepSeek V4.1 Flash (the default), Ling 3.0 Flash, and Qwen 3.7 Flash (shown as
-// "VetroAI"). AIROUTER_MODEL, AIROUTER_LING_MODEL and AIROUTER_QWEN_MODEL
+// "VetroAI"), plus Grok 4.20 Non-Reasoning. AIROUTER_MODEL, AIROUTER_LING_MODEL,
+// AIROUTER_GROK_MODEL and AIROUTER_QWEN_MODEL
 // override the ids only if AI Router names them differently.
 const MODEL = "deepseek/deepseek-v4.1-flash";
 const LING_MODEL = "inclusionai/ling-3.0-flash";
 const QWEN_MODEL = "alibaba/qwen3.7-flash";
+const GROK_MODEL = "spacexai/grok-4.20-non-reasoning";
+const GROK_420_RE = /grok[\s_-]*4\.20\b/i;
 
 // AI Router (airouter.in) exposes an OpenAI-compatible /chat/completions endpoint,
 // so the stream is handed back untouched and parsed by AIOrchestrator.pipeStream
@@ -29,6 +32,7 @@ function defaultModel() {
 function modelFor(label) {
   const text = String(label || "").trim();
   if (/\bling\b/i.test(text)) return config.airouterLingModel || LING_MODEL;
+  if (GROK_420_RE.test(text)) return config.airouterGrokModel || GROK_MODEL;
   if (/qwen|^vetro\s?ai$/i.test(text)) return config.airouterQwenModel || QWEN_MODEL;
   if (/deepseek|ai[\s_-]?router/i.test(text)) return defaultModel();
   return null;
@@ -38,6 +42,7 @@ function modelFor(label) {
 function displayName(modelId) {
   const id = String(modelId || defaultModel());
   if (/(^|\/)ling-/i.test(id)) return "Ling 3.0 Flash";
+  if (/grok/i.test(id)) return "Grok 4.20 Non-Reasoning";
   if (/qwen/i.test(id)) return "VetroAI";
   return "DeepSeek V4.1 Flash";
 }
@@ -244,6 +249,7 @@ module.exports = {
   complete,
   MODEL,
   LING_MODEL,
+  GROK_MODEL,
   QWEN_MODEL,
   modelFor,
   displayName,

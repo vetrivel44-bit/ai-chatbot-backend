@@ -572,9 +572,10 @@ const LANGS = {
   }},
 };
 
-// "VetroAI" (Qwen 3.7 Flash), "DeepSeek V4.1 Flash" and "Ling 3.0 Flash" are served
+// "VetroAI" (Qwen 3.7 Flash), "DeepSeek V4.1 Flash", "Ling 3.0 Flash" and
+// "Grok 4.20 Non-Reasoning" are served
 // by AI Router on the backend (providers/airouterAdapter.js), which picks the model by name.
-const PROVIDERS = ["VetroAI", "ChatGPT", "Groq", "Gemini", "DeepSeek V4.1 Flash", "Ling 3.0 Flash"];
+const PROVIDERS = ["VetroAI", "ChatGPT", "Groq", "Gemini", "DeepSeek V4.1 Flash", "Ling 3.0 Flash", "Grok 4.20 Non-Reasoning"];
 
 const MODES_LIST = [
   { id: "normal", name: "Normal Chat", icon: "Bot", desc: "General conversation and assistant" },
